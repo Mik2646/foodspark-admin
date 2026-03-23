@@ -12,6 +12,7 @@ export default function RestaurantsPage() {
   const merchants = users.filter(u => u.role === "merchant" || u.role === "admin");
 
   async function handleAssign(restaurantId: string, ownerId: number | null) {
+    if (ownerId === null) return;
     setAssigningId(restaurantId);
     await assign.mutateAsync({ restaurantId, ownerId });
     setAssigningId(null);
