@@ -1,13 +1,15 @@
 "use client";
 import { useState } from "react";
 import { trpc } from "@/lib/trpc";
-import { CheckCircle, XCircle } from "lucide-react";
+import { CheckCircle, XCircle, ToggleLeft, ToggleRight } from "lucide-react";
 
 export default function RestaurantsPage() {
   const { data: restaurants = [], isLoading, refetch } = trpc.admin.listRestaurants.useQuery();
   const { data: users = [] } = trpc.admin.listUsers.useQuery();
   const assign = trpc.admin.assignRestaurant.useMutation({ onSuccess: () => refetch() });
+  const toggle = trpc.admin.toggleRestaurant.useMutation({ onSuccess: () => refetch() });
   const [assigningId, setAssigningId] = useState<string | null>(null);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
 
   const merchants = users.filter(u => u.role === "merchant" || u.role === "admin");
 
@@ -18,11 +20,20 @@ export default function RestaurantsPage() {
     setAssigningId(null);
   }
 
+  async function handleToggle(restaurantId: string, isOpen: boolean) {
+    setTogglingId(restaurantId);
+    await toggle.mutateAsync({ restaurantId, isOpen });
+    setTogglingId(null);
+  }
+
   if (isLoading) return <div className="text-gray-400 text-sm">กำลังโหลด...</div>;
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">จัดการร้านอาหาร</h1>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-bold text-gray-900">จัดการร้านอาหาร</h1>
+        <span className="text-sm text-gray-400">{restaurants.length} ร้าน</span>
+      </div>
 
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
         <table className="w-full text-sm">
@@ -34,6 +45,7 @@ export default function RestaurantsPage() {
               <th className="text-left px-4 py-3 font-medium text-gray-600">สถานะ</th>
               <th className="text-left px-4 py-3 font-medium text-gray-600">เจ้าของ</th>
               <th className="text-left px-4 py-3 font-medium text-gray-600">มอบหมายให้</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-600">เปิด/ปิด</th>
             </tr>
           </thead>
           <tbody>
@@ -41,7 +53,7 @@ export default function RestaurantsPage() {
               const owner = users.find(u => u.id === r.ownerId);
               return (
                 <tr key={r.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
-                  <td className="px-4 py-3 text-gray-400 font-mono">{r.id}</td>
+                  <td className="px-4 py-3 text-gray-400 font-mono text-xs">{r.id}</td>
                   <td className="px-4 py-3 font-medium text-gray-900">{r.name}</td>
                   <td className="px-4 py-3 text-gray-500">{r.category ?? "—"}</td>
                   <td className="px-4 py-3">
@@ -67,11 +79,22 @@ export default function RestaurantsPage() {
                     >
                       <option value="">— ไม่มีเจ้าของ —</option>
                       {merchants.map(m => (
-                        <option key={m.id} value={m.id}>
-                          {m.name ?? m.email} (#{m.id})
-                        </option>
+                        <option key={m.id} value={m.id}>{m.name ?? m.email} (#{m.id})</option>
                       ))}
                     </select>
+                  </td>
+                  <td className="px-4 py-3">
+                    <button
+                      onClick={() => handleToggle(r.id, !r.isOpen)}
+                      disabled={togglingId === r.id}
+                      className="flex items-center gap-1.5 text-xs font-medium disabled:opacity-50 transition-colors"
+                    >
+                      {r.isOpen ? (
+                        <><ToggleRight className="w-5 h-5 text-green-500" /><span className="text-green-600">เปิดอยู่</span></>
+                      ) : (
+                        <><ToggleLeft className="w-5 h-5 text-gray-400" /><span className="text-gray-400">ปิดอยู่</span></>
+                      )}
+                    </button>
                   </td>
                 </tr>
               );
