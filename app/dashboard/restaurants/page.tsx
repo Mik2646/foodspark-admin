@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import Link from "next/link";
 import { trpc } from "@/lib/trpc";
 import { CheckCircle, XCircle, ToggleLeft, ToggleRight } from "lucide-react";
 
@@ -54,7 +55,11 @@ export default function RestaurantsPage() {
               return (
                 <tr key={r.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
                   <td className="px-4 py-3 text-gray-400 font-mono text-xs">{r.id}</td>
-                  <td className="px-4 py-3 font-medium text-gray-900">{r.name}</td>
+                  <td className="px-4 py-3 font-medium text-gray-900">
+                    <Link href={`/dashboard/restaurants/${r.id}`} className="hover:text-orange-500 hover:underline transition-colors">
+                      {r.name}
+                    </Link>
+                  </td>
                   <td className="px-4 py-3 text-gray-500">{r.category ?? "—"}</td>
                   <td className="px-4 py-3">
                     {r.isOpen ? (
