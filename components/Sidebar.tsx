@@ -3,6 +3,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { clearSession } from "@/lib/auth";
 import { LayoutDashboard, Users, Store, ClipboardList, LogOut, ChefHat, Bike, ShieldCheck, Settings } from "lucide-react";
+import { trpc } from "@/lib/trpc";
 
 const links = [
   { href: "/dashboard", label: "ภาพรวม", icon: LayoutDashboard },
@@ -17,6 +18,8 @@ const links = [
 export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
+  const { data: pending = [] } = trpc.admin.listPendingApprovals.useQuery(undefined, { refetchInterval: 15000 });
+  const pendingCount = pending.length;
 
   function handleLogout() {
     clearSession();
@@ -35,6 +38,7 @@ export function Sidebar() {
       <nav className="flex-1 px-3 py-4 space-y-0.5">
         {links.map(({ href, label, icon: Icon }) => {
           const active = pathname === href;
+          const isApprovals = href === "/dashboard/approvals";
           return (
             <Link
               key={href}
@@ -46,7 +50,12 @@ export function Sidebar() {
               }`}
             >
               <Icon className="w-4 h-4 flex-shrink-0" />
-              {label}
+              <span className="flex-1">{label}</span>
+              {isApprovals && pendingCount > 0 && (
+                <span className="ml-auto min-w-[20px] h-5 px-1.5 rounded-full bg-red-500 text-white text-xs font-bold flex items-center justify-center">
+                  {pendingCount}
+                </span>
+              )}
             </Link>
           );
         })}

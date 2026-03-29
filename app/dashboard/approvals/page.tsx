@@ -40,6 +40,7 @@ export default function ApprovalsPage() {
               <tr className="border-b border-gray-100 bg-gray-50">
                 <th className="text-left px-6 py-3 font-medium text-gray-500 text-xs">ผู้ใช้</th>
                 <th className="text-left px-6 py-3 font-medium text-gray-500 text-xs">บทบาท</th>
+                <th className="text-left px-6 py-3 font-medium text-gray-500 text-xs">ชื่อร้าน / ข้อมูล</th>
                 <th className="text-left px-6 py-3 font-medium text-gray-500 text-xs">อีเมล</th>
                 <th className="text-left px-6 py-3 font-medium text-gray-500 text-xs">โทรศัพท์</th>
                 <th className="text-left px-6 py-3 font-medium text-gray-500 text-xs">วันที่สมัคร</th>
@@ -64,6 +65,13 @@ export default function ApprovalsPage() {
                         <RoleIcon className="w-3 h-3" />
                         {ROLE_LABELS[u.role] ?? u.role}
                       </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      {u.role === "merchant" ? (
+                        <span className="font-medium text-gray-800">{(u as any).restaurantName ?? <span className="text-gray-400 italic">ไม่มีข้อมูลร้าน</span>}</span>
+                      ) : (
+                        <span className="text-gray-400 text-xs">—</span>
+                      )}
                     </td>
                     <td className="px-6 py-4 text-gray-500">{u.email ?? "—"}</td>
                     <td className="px-6 py-4 text-gray-500">{u.phone ?? "—"}</td>
