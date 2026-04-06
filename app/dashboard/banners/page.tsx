@@ -1,32 +1,18 @@
 "use client";
-import { trpc, getToken } from "@/lib/trpc";
-import { useState, useEffect } from "react";
+import { trpc } from "@/lib/trpc";
+import { useState, useEffect, useCallback } from "react";
 import { Plus, Trash2, Save, ImageIcon, Layers, Megaphone } from "lucide-react";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000";
 
 type Banner = { imageUrl: string; title?: string; subtitle?: string };
 
-// ─── Reusable upload helper ───────────────────────────────────────────────────
-async function uploadFile(file: File): Promise<string> {
-  const base64 = await new Promise<string>((resolve, reject) => {
+// ─── Convert file to base64 ───────────────────────────────────────────────────
+async function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve((reader.result as string).split(",")[1]);
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
-  const token = getToken();
-  const res = await fetch(`${API_BASE}/api/upload`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body: JSON.stringify({ base64, mimeType: file.type }),
-  });
-  const data = await res.json();
-  if (!data.url) throw new Error(data.error ?? "อัปโหลดไม่สำเร็จ");
-  return data.url;
 }
 
 // ─── Banner section component ────────────────────────────────────────────────
@@ -53,6 +39,7 @@ function BannerSection({
     },
   });
 
+  const uploadFileMutation = trpc.admin.uploadFile.useMutation();
   const [banners, setBanners] = useState<Banner[]>([]);
   const [saved, setSaved] = useState(false);
   const [showForm, setShowForm] = useState(false);
@@ -72,10 +59,11 @@ function BannerSection({
   const handleUpload = async (file: File) => {
     setUploading(true);
     try {
-      const url = await uploadFile(file);
-      setNewImageUrl(url);
+      const base64 = await fileToBase64(file);
+      const result = await uploadFileMutation.mutateAsync({ base64, mimeType: file.type });
+      setNewImageUrl(result.url);
     } catch (e: any) {
-      alert("เกิดข้อผิดพลาด: " + e?.message);
+      alert("เกิดข้อผิดพลาด: " + (e?.message ?? "อัปโหลดไม่สำเร็จ"));
     } finally {
       setUploading(false);
     }
