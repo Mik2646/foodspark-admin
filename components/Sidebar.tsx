@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { clearSession } from "@/lib/auth";
-import { LayoutDashboard, Users, Store, ClipboardList, LogOut, ChefHat, Bike, ShieldCheck, Settings } from "lucide-react";
+import { LayoutDashboard, Users, Store, ClipboardList, LogOut, ChefHat, Bike, ShieldCheck, Settings, Image, Flame } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 
 const links = [
@@ -12,6 +12,8 @@ const links = [
   { href: "/dashboard/orders", label: "ออเดอร์ทั้งหมด", icon: ClipboardList },
   { href: "/dashboard/riders", label: "ไรเดอร์", icon: Bike },
   { href: "/dashboard/approvals", label: "อนุมัติคำขอ", icon: ShieldCheck },
+  { href: "/dashboard/flash-deals", label: "ดีลแฟลช", icon: Flame },
+  { href: "/dashboard/banners", label: "จัดการ Banner", icon: Image },
   { href: "/dashboard/settings", label: "ตั้งค่าระบบ", icon: Settings },
 ];
 
