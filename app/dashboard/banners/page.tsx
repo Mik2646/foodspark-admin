@@ -7,6 +7,10 @@ type Banner = { imageUrl: string; title?: string; subtitle?: string };
 
 // ─── Upload via Next.js proxy route → Railway → R2 ───────────────────────────
 async function uploadToR2(file: File, token: string | null): Promise<string> {
+  // Validate file size client-side (max 10MB)
+  if (file.size > 10 * 1024 * 1024) {
+    throw new Error("ไฟล์ใหญ่เกินไป (สูงสุด 10MB) กรุณาลดขนาดรูปก่อนอัพโหลด");
+  }
   const base64 = await new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve((reader.result as string).split(",")[1]);
