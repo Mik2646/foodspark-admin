@@ -52,6 +52,9 @@ function BannerSection({
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
     },
+    onError: (e) => {
+      alert("บันทึกไม่สำเร็จ: " + e.message);
+    },
   });
 
   const [banners, setBanners] = useState<Banner[]>([]);
