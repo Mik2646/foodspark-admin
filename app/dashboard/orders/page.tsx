@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { trpc } from "@/lib/trpc";
+import { Trash2 } from "lucide-react";
 
 const STATUSES = ["", "pending", "preparing", "ready", "delivering", "delivered", "cancelled"] as const;
 const STATUS_LABELS: Record<string, string> = {
@@ -18,11 +19,15 @@ const STATUS_COLORS: Record<string, string> = {
 
 export default function OrdersPage() {
   const [filterStatus, setFilterStatus] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const { data: orders = [], isLoading, refetch } = trpc.admin.listOrders.useQuery(
     { status: filterStatus || undefined },
     { refetchInterval: 15000 }
   );
   const updateStatus = trpc.admin.updateOrderStatus.useMutation({ onSuccess: () => refetch() });
+  const deleteOrder = trpc.admin.deleteOrder.useMutation({
+    onSuccess: () => { setConfirmDelete(null); refetch(); },
+  });
 
   return (
     <div>
@@ -79,16 +84,42 @@ export default function OrdersPage() {
                     {new Date(o.createdAt).toLocaleString("th-TH", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
                   </td>
                   <td className="px-4 py-3">
-                    <select
-                      value={o.status}
-                      disabled={updateStatus.isPending}
-                      onChange={e => updateStatus.mutate({ orderId: o.id, status: e.target.value as any })}
-                      className="border border-gray-200 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-orange-400 disabled:opacity-50"
-                    >
-                      {(["pending","preparing","ready","delivering","delivered","cancelled"] as const).map(s => (
-                        <option key={s} value={s}>{STATUS_LABELS[s]}</option>
-                      ))}
-                    </select>
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={o.status}
+                        disabled={updateStatus.isPending}
+                        onChange={e => updateStatus.mutate({ orderId: o.id, status: e.target.value as any })}
+                        className="border border-gray-200 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-orange-400 disabled:opacity-50"
+                      >
+                        {(["pending","preparing","ready","delivering","delivered","cancelled"] as const).map(s => (
+                          <option key={s} value={s}>{STATUS_LABELS[s]}</option>
+                        ))}
+                      </select>
+                      {confirmDelete === o.id ? (
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => deleteOrder.mutate({ orderId: o.id })}
+                            disabled={deleteOrder.isPending}
+                            className="text-xs px-2 py-1 bg-red-500 text-white rounded-lg hover:bg-red-600 disabled:opacity-50 transition-colors"
+                          >
+                            ยืนยัน
+                          </button>
+                          <button
+                            onClick={() => setConfirmDelete(null)}
+                            className="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition-colors"
+                          >
+                            ยกเลิก
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setConfirmDelete(o.id)}
+                          className="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
