@@ -1,6 +1,6 @@
 "use client";
 import { trpc } from "@/lib/trpc";
-import { CheckCircle, XCircle, User, Store, Bike, Phone, Car } from "lucide-react";
+import { CheckCircle, XCircle, User, Store, Bike, Phone, Car, Navigation } from "lucide-react";
 
 const ROLE_LABELS: Record<string, string> = { merchant: "ร้านค้า", rider: "ไรเดอร์" };
 const ROLE_ICONS: Record<string, React.ElementType> = { merchant: Store, rider: Bike };
@@ -10,9 +10,14 @@ const ROLE_COLORS: Record<string, string> = {
 };
 
 const VEHICLE_LABELS: Record<string, string> = {
-  motorcycle: "มอเตอร์ไซค์ 🏍️",
-  bicycle: "จักรยาน 🚲",
-  car: "รถยนต์ 🚗",
+  motorcycle: "มอเตอร์ไซค์",
+  bicycle: "จักรยาน",
+  car: "รถยนต์",
+};
+const VEHICLE_ICONS: Record<string, React.ElementType> = {
+  motorcycle: Bike,
+  bicycle: Navigation,
+  car: Car,
 };
 
 export default function ApprovalsPage() {
@@ -90,11 +95,11 @@ export default function ApprovalsPage() {
                       {/* Rider info */}
                       {u.role === "rider" && (ua.vehicleType || ua.vehiclePlate) && (
                         <div className="mt-2 p-3 bg-cyan-50 rounded-xl space-y-1">
-                          {ua.vehicleType && (
-                            <p className="text-sm font-semibold text-cyan-800">
-                              {VEHICLE_LABELS[ua.vehicleType] ?? ua.vehicleType}
+                          {ua.vehicleType && (() => { const VIcon = VEHICLE_ICONS[ua.vehicleType] ?? Bike; return (
+                            <p className="text-sm font-semibold text-cyan-800 flex items-center gap-1.5">
+                              <VIcon size={14} /> {VEHICLE_LABELS[ua.vehicleType] ?? ua.vehicleType}
                             </p>
-                          )}
+                          ); })()}
                           {ua.vehiclePlate && (
                             <p className="text-xs text-cyan-600">ทะเบียน: {ua.vehiclePlate}</p>
                           )}

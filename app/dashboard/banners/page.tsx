@@ -1,7 +1,7 @@
 "use client";
 import { trpc, getToken } from "@/lib/trpc";
 import { useState, useEffect } from "react";
-import { Plus, Trash2, Save, ImageIcon, Layers, Megaphone, Pencil, X, Clock } from "lucide-react";
+import { Plus, Trash2, Save, ImageIcon, Layers, Megaphone, Pencil, X, Clock, CheckCircle } from "lucide-react";
 
 type Banner = {
   imageUrl: string;
@@ -121,7 +121,7 @@ function BannerSection({
           <button onClick={openAdd} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-white text-xs font-semibold rounded-lg" style={{ backgroundColor: accentColor }}>
             <Plus className="w-3.5 h-3.5" /> เพิ่ม
           </button>
-          {saved && <span className="inline-flex items-center px-3 py-1.5 bg-green-50 text-green-600 text-xs font-semibold rounded-lg">บันทึกแล้ว ✓</span>}
+          {saved && <span className="inline-flex items-center gap-1 px-3 py-1.5 bg-green-50 text-green-600 text-xs font-semibold rounded-lg"><CheckCircle className="w-3.5 h-3.5" />บันทึกแล้ว</span>}
           {updateSettings.isPending && <span className="inline-flex items-center px-3 py-1.5 bg-gray-50 text-gray-500 text-xs rounded-lg">กำลังบันทึก...</span>}
         </div>
       </div>
