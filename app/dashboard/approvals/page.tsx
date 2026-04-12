@@ -27,8 +27,8 @@ export default function ApprovalsPage() {
     onSuccess: () => utils.admin.listPendingApprovals.invalidate(),
   });
 
-  const handle = (userId: number, status: "approved" | "rejected") => {
-    setStatus.mutate({ userId, status });
+  const handle = (userId: number, role: "merchant" | "rider", status: "approved" | "rejected") => {
+    setStatus.mutate({ userId, role, status });
   };
 
   return (
@@ -55,7 +55,7 @@ export default function ApprovalsPage() {
             const RoleIcon = ROLE_ICONS[u.role] ?? User;
             const ua = u as any;
             return (
-              <div key={u.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+              <div key={`${u.id}-${u.role}`} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
                 <div className="flex items-start justify-between gap-4">
                   {/* Left: user info */}
                   <div className="flex items-start gap-3 flex-1 min-w-0">
@@ -115,7 +115,7 @@ export default function ApprovalsPage() {
                   {/* Right: action buttons */}
                   <div className="flex flex-col gap-2 flex-shrink-0">
                     <button
-                      onClick={() => handle(u.id, "approved")}
+                      onClick={() => handle(u.id, u.role as "merchant" | "rider", "approved")}
                       disabled={setStatus.isPending}
                       className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-green-500 text-white text-sm font-semibold hover:bg-green-600 transition-colors disabled:opacity-50"
                     >
@@ -123,7 +123,7 @@ export default function ApprovalsPage() {
                       อนุมัติ
                     </button>
                     <button
-                      onClick={() => handle(u.id, "rejected")}
+                      onClick={() => handle(u.id, u.role as "merchant" | "rider", "rejected")}
                       disabled={setStatus.isPending}
                       className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-red-50 text-red-600 text-sm font-semibold hover:bg-red-100 transition-colors disabled:opacity-50 border border-red-200"
                     >
