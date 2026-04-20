@@ -2,11 +2,35 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { clearSession } from "@/lib/auth";
-import { LayoutDashboard, Users, Store, ClipboardList, LogOut, ChefHat, Bike, ShieldCheck, Settings, Image, Flame, Tag } from "lucide-react";
+import {
+  AlertTriangle,
+  Bell,
+  BookText,
+  ChefHat,
+  ClipboardList,
+  Flame,
+  HandCoins,
+  KeyRound,
+  LayoutDashboard,
+  LogOut,
+  ShieldCheck,
+  Store,
+  Tag,
+  Users,
+  Bike,
+  Settings,
+  Image,
+} from "lucide-react";
 import { trpc } from "@/lib/trpc";
 
 const links = [
   { href: "/dashboard", label: "ภาพรวม", icon: LayoutDashboard },
+  { href: "/dashboard/inbox", label: "กล่องแจ้งเตือน", icon: Bell },
+  { href: "/dashboard/incidents", label: "Incident Center", icon: AlertTriangle },
+  { href: "/dashboard/disputes", label: "Refund/Dispute", icon: HandCoins },
+  { href: "/dashboard/finance", label: "การเงิน/Settlement", icon: HandCoins },
+  { href: "/dashboard/audit", label: "Audit Log", icon: BookText },
+  { href: "/dashboard/rbac", label: "RBAC สิทธิ์แอดมิน", icon: KeyRound },
   { href: "/dashboard/users", label: "ผู้ใช้งาน", icon: Users },
   { href: "/dashboard/restaurants", label: "ร้านอาหาร", icon: Store },
   { href: "/dashboard/orders", label: "ออเดอร์ทั้งหมด", icon: ClipboardList },
@@ -22,7 +46,12 @@ export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const { data: pending = [] } = trpc.admin.listPendingApprovals.useQuery(undefined, { refetchInterval: 15000 });
+  const { data: unreadNotifications = [] } = trpc.admin.listNotifications.useQuery(
+    { unreadOnly: true, limit: 200 },
+    { refetchInterval: 15000 },
+  );
   const pendingCount = pending.length;
+  const unreadCount = unreadNotifications.length;
 
   function handleLogout() {
     clearSession();
@@ -42,6 +71,7 @@ export function Sidebar() {
         {links.map(({ href, label, icon: Icon }) => {
           const active = pathname === href;
           const isApprovals = href === "/dashboard/approvals";
+          const isInbox = href === "/dashboard/inbox";
           return (
             <Link
               key={href}
@@ -57,6 +87,11 @@ export function Sidebar() {
               {isApprovals && pendingCount > 0 && (
                 <span className="ml-auto min-w-[20px] h-5 px-1.5 rounded-full bg-red-500 text-white text-xs font-bold flex items-center justify-center">
                   {pendingCount}
+                </span>
+              )}
+              {isInbox && unreadCount > 0 && (
+                <span className="ml-auto min-w-[20px] h-5 px-1.5 rounded-full bg-orange-500 text-white text-xs font-bold flex items-center justify-center">
+                  {unreadCount > 99 ? "99+" : unreadCount}
                 </span>
               )}
             </Link>
