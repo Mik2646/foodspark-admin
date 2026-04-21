@@ -1,7 +1,8 @@
 "use client";
 import { trpc, getToken } from "@/lib/trpc";
 import { useState, useEffect } from "react";
-import { Plus, Trash2, Save, ImageIcon, Layers, Megaphone, Pencil, X, Clock, CheckCircle } from "lucide-react";
+import Image from "next/image";
+import { Plus, Trash2, ImageIcon, Layers, Megaphone, Pencil, X, Clock, CheckCircle } from "lucide-react";
 
 type Banner = {
   imageUrl: string;
@@ -170,8 +171,14 @@ function BannerSection({
           {form.imageUrl && (
             <div className="mb-3">
               <p className="text-xs font-medium text-gray-500 mb-1">ตัวอย่าง</p>
-              <img src={form.imageUrl} alt="preview" className="h-28 w-auto rounded-xl object-cover border border-gray-200"
-                onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+              <Image
+                src={form.imageUrl}
+                alt="preview"
+                width={320}
+                height={112}
+                unoptimized
+                className="h-28 w-auto rounded-xl object-cover border border-gray-200"
+              />
             </div>
           )}
 
@@ -206,9 +213,14 @@ function BannerSection({
                 <div key={index} className="flex items-center gap-3 p-3 rounded-xl border border-gray-100 bg-gray-50">
                   <div className="flex-shrink-0 relative">
                     {banner.imageUrl ? (
-                      <img src={banner.imageUrl} alt={banner.title ?? `Banner ${index + 1}`}
+                      <Image
+                        src={banner.imageUrl}
+                        alt={banner.title ?? `Banner ${index + 1}`}
+                        width={96}
+                        height={56}
+                        unoptimized
                         className="w-24 h-14 object-cover rounded-lg border border-gray-200"
-                        onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                      />
                     ) : (
                       <div className="w-24 h-14 rounded-lg bg-gray-200 flex items-center justify-center">
                         <ImageIcon className="w-5 h-5 text-gray-400" />

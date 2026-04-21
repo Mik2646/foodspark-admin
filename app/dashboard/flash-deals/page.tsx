@@ -1,6 +1,7 @@
 "use client";
 import { trpc } from "@/lib/trpc";
 import { useState, useMemo } from "react";
+import Image from "next/image";
 import { Flame, Search, Store } from "lucide-react";
 
 export default function FlashDealsPage() {
@@ -138,8 +139,14 @@ export default function FlashDealsPage() {
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
                       {item.imageUrl ? (
-                        <img src={item.imageUrl} alt={item.name} className="w-10 h-10 rounded-lg object-cover flex-shrink-0 border border-gray-100"
-                          onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                        <Image
+                          src={item.imageUrl}
+                          alt={item.name}
+                          width={40}
+                          height={40}
+                          unoptimized
+                          className="w-10 h-10 rounded-lg object-cover flex-shrink-0 border border-gray-100"
+                        />
                       ) : (
                         <div className="w-10 h-10 rounded-lg bg-gray-100 flex-shrink-0" />
                       )}

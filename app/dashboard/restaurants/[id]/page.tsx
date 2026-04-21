@@ -1,6 +1,7 @@
 "use client";
 import { use, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { trpc, getToken } from "@/lib/trpc";
 import { ArrowLeft, Store, Star, Clock, Truck, ChevronRight, Package, Pencil, Plus, Trash2, Check, X, ImageIcon } from "lucide-react";
 
@@ -163,7 +164,14 @@ export default function RestaurantDetailPage({ params }: { params: Promise<{ id:
         {/* Cover */}
         {!editingInfo && r.coverUrl && (
           <div className="w-full h-40 overflow-hidden bg-gray-100">
-            <img src={r.coverUrl} alt={r.name} className="w-full h-full object-cover" />
+            <Image
+              src={r.coverUrl}
+              alt={r.name}
+              width={1280}
+              height={320}
+              unoptimized
+              className="w-full h-full object-cover"
+            />
           </div>
         )}
 
@@ -222,8 +230,14 @@ export default function RestaurantDetailPage({ params }: { params: Promise<{ id:
                       onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUploadInfo(field, f); }}
                       className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white file:mr-3 file:py-1 file:px-3 file:rounded-md file:border-0 file:bg-orange-50 file:text-orange-600 file:font-medium" />
                     {infoForm[field] && (
-                      <img src={String(infoForm[field])} className="h-16 mt-2 rounded-lg object-cover border border-gray-100"
-                        onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                      <Image
+                        src={String(infoForm[field])}
+                        alt={field === "imageUrl" ? "โลโก้ร้าน" : "รูปปกร้าน"}
+                        width={96}
+                        height={64}
+                        unoptimized
+                        className="h-16 mt-2 rounded-lg object-cover border border-gray-100"
+                      />
                     )}
                   </div>
                 ))}
@@ -231,11 +245,18 @@ export default function RestaurantDetailPage({ params }: { params: Promise<{ id:
               {uploading && <p className="text-xs text-orange-500">⏳ กำลังอัปโหลด...</p>}
             </div>
           ) : (
-            <div className="flex items-start gap-4">
-              {r.imageUrl && (
-                <img src={r.imageUrl} alt={r.name} className="w-16 h-16 rounded-xl object-cover border border-gray-100 flex-shrink-0" />
-              )}
-              <div className="flex-1 min-w-0">
+              <div className="flex items-start gap-4">
+                {r.imageUrl && (
+                  <Image
+                    src={r.imageUrl}
+                    alt={r.name}
+                    width={64}
+                    height={64}
+                    unoptimized
+                    className="w-16 h-16 rounded-xl object-cover border border-gray-100 flex-shrink-0"
+                  />
+                )}
+                <div className="flex-1 min-w-0">
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <div className="flex items-center gap-2 flex-wrap">
@@ -333,7 +354,16 @@ export default function RestaurantDetailPage({ params }: { params: Promise<{ id:
                   onChange={(e) => { const f = e.target.files?.[0]; if (f) handleItemUpload("imageUrl", f, setItemForm as any, setItemUploading); }}
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white file:mr-3 file:py-1 file:px-3 file:rounded-md file:border-0 file:bg-orange-50 file:text-orange-600 file:font-medium" />
                 {itemUploading && <p className="text-xs text-orange-500 mt-1">⏳ กำลังอัปโหลด...</p>}
-                {itemForm.imageUrl && <img src={itemForm.imageUrl} className="h-14 mt-2 rounded-lg object-cover border border-gray-100" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />}
+                {itemForm.imageUrl && (
+                  <Image
+                    src={itemForm.imageUrl}
+                    alt="ตัวอย่างรูปเมนูใหม่"
+                    width={112}
+                    height={56}
+                    unoptimized
+                    className="h-14 mt-2 rounded-lg object-cover border border-gray-100"
+                  />
+                )}
               </div>
               <div className="flex items-center gap-2 pt-4">
                 <input type="checkbox" id="newIsPopular" checked={itemForm.isPopular}
@@ -391,7 +421,16 @@ export default function RestaurantDetailPage({ params }: { params: Promise<{ id:
                               onChange={(e) => { const f = e.target.files?.[0]; if (f) handleItemUpload("imageUrl", f, setEditItemForm as any, setEditItemUploading); }}
                               className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white file:mr-3 file:py-1 file:px-3 file:rounded-md file:border-0 file:bg-blue-50 file:text-blue-600 file:font-medium" />
                             {editItemUploading && <p className="text-xs text-blue-500 mt-1">⏳ กำลังอัปโหลด...</p>}
-                            {editItemForm.imageUrl && <img src={editItemForm.imageUrl} className="h-14 mt-2 rounded-lg object-cover border border-gray-100" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />}
+                            {editItemForm.imageUrl && (
+                              <Image
+                                src={editItemForm.imageUrl}
+                                alt="ตัวอย่างรูปเมนูที่แก้ไข"
+                                width={112}
+                                height={56}
+                                unoptimized
+                                className="h-14 mt-2 rounded-lg object-cover border border-gray-100"
+                              />
+                            )}
                           </div>
                           <div className="flex items-center gap-2 pt-4">
                             <input type="checkbox" checked={editItemForm.isPopular}
@@ -413,7 +452,14 @@ export default function RestaurantDetailPage({ params }: { params: Promise<{ id:
                     ) : (
                       <div className="flex items-center gap-4 px-6 py-3 hover:bg-gray-50/50 transition-colors">
                         {item.imageUrl ? (
-                          <img src={item.imageUrl} alt={item.name} className="w-12 h-12 rounded-lg object-cover flex-shrink-0 border border-gray-100" />
+                          <Image
+                            src={item.imageUrl}
+                            alt={item.name}
+                            width={48}
+                            height={48}
+                            unoptimized
+                            className="w-12 h-12 rounded-lg object-cover flex-shrink-0 border border-gray-100"
+                          />
                         ) : (
                           <div className="w-12 h-12 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
                             <ImageIcon className="w-5 h-5 text-gray-300" />
