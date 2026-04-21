@@ -59,6 +59,40 @@ type PromoCode = {
 
 type PromoFilter = "all" | "active" | "inactive" | "expired" | "used_out";
 
+type PromoUsageRow = {
+  promoId: number | null;
+  code: string;
+  description: string | null;
+  type: string;
+  value: number;
+  isActive: boolean;
+  maxUses: number | null;
+  usedCount: number;
+  expiresAt: string | Date | null;
+  ordersWithPromo: number;
+  cancelledOrders: number;
+  netOrders: number;
+  discountGranted: number;
+  discountReverted: number;
+  netDiscount: number;
+  gmvNet: number;
+};
+
+type PromoUsageReport = {
+  days: number;
+  since: string | Date;
+  totals: {
+    ordersWithPromo: number;
+    cancelledOrders: number;
+    netOrders: number;
+    discountGranted: number;
+    discountReverted: number;
+    netDiscount: number;
+    gmvNet: number;
+  } | null;
+  rows: PromoUsageRow[];
+};
+
 function parseSettingNumber(raw: unknown, fallback: number) {
   const n = Number(raw);
   if (!Number.isFinite(n)) return fallback;
@@ -310,9 +344,15 @@ function DeliverySettings() {
 function PromoSection() {
   const utils = trpc.useUtils();
   const { data: promosRaw = [], isLoading } = trpc.admin.listPromoCodes.useQuery();
+  const [usageDays, setUsageDays] = useState(30);
+  const usageQuery = trpc.admin.promoUsageReport.useQuery(
+    { days: usageDays },
+    { refetchInterval: 30000 },
+  );
   const createPromo = trpc.admin.createPromoCode.useMutation({
     onSuccess: async () => {
       await utils.admin.listPromoCodes.invalidate();
+      await utils.admin.promoUsageReport.invalidate();
       setShowForm(false);
       resetForm();
       setNotice({ type: "success", message: "สร้างโค้ดส่วนลดเรียบร้อยแล้ว" });
@@ -323,12 +363,16 @@ function PromoSection() {
     },
   });
   const togglePromo = trpc.admin.togglePromoCode.useMutation({
-    onSuccess: () => utils.admin.listPromoCodes.invalidate(),
+    onSuccess: async () => {
+      await utils.admin.listPromoCodes.invalidate();
+      await utils.admin.promoUsageReport.invalidate();
+    },
     onError: (e) => setNotice({ type: "error", message: e.message || "เปลี่ยนสถานะไม่สำเร็จ" }),
   });
   const deletePromo = trpc.admin.deletePromoCode.useMutation({
     onSuccess: async () => {
       await utils.admin.listPromoCodes.invalidate();
+      await utils.admin.promoUsageReport.invalidate();
       setDeleteTarget(null);
       setNotice({ type: "success", message: "ลบโค้ดส่วนลดสำเร็จ" });
       setTimeout(() => setNotice(null), 2500);
@@ -337,6 +381,7 @@ function PromoSection() {
   });
 
   const promos = promosRaw as PromoCode[];
+  const promoUsage = (usageQuery.data as PromoUsageReport | undefined) ?? null;
 
   const [showForm, setShowForm] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<PromoCode | null>(null);
@@ -476,6 +521,89 @@ function PromoSection() {
           <div className="text-xs text-blue-600">ใช้ครบสิทธิ์</div>
           <div className="text-lg font-bold text-blue-700">{stats.usedOut}</div>
         </div>
+      </div>
+
+      <div className="rounded-xl border border-blue-100 bg-blue-50 p-4 mb-4">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mb-3">
+          <div>
+            <h3 className="text-sm font-semibold text-blue-900">รายงานการใช้งานคูปองจริง</h3>
+            <p className="text-xs text-blue-700 mt-0.5">
+              แสดงยอดส่วนลดที่ใช้งานจริง และยอดที่ถูกคืนโควตาเมื่อออเดอร์ถูกยกเลิก
+            </p>
+          </div>
+          <div className="flex items-center gap-1.5">
+            {[7, 14, 30, 60].map((d) => (
+              <button
+                key={d}
+                onClick={() => setUsageDays(d)}
+                className={`px-2.5 py-1.5 text-xs font-semibold rounded-lg border ${
+                  usageDays === d
+                    ? "bg-blue-600 text-white border-blue-600"
+                    : "bg-white text-blue-700 border-blue-200 hover:border-blue-400"
+                }`}
+              >
+                {d} วัน
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {usageQuery.isLoading ? (
+          <div className="text-xs text-blue-700">กำลังโหลดรายงาน...</div>
+        ) : promoUsage?.totals ? (
+          <>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
+              <div className="rounded-lg bg-white border border-blue-100 px-3 py-2">
+                <p className="text-[11px] text-gray-500">ออเดอร์ใช้คูปอง</p>
+                <p className="text-sm font-bold text-gray-900">{promoUsage.totals.ordersWithPromo}</p>
+              </div>
+              <div className="rounded-lg bg-white border border-blue-100 px-3 py-2">
+                <p className="text-[11px] text-gray-500">ออเดอร์ยกเลิก (คืนโควตา)</p>
+                <p className="text-sm font-bold text-rose-600">{promoUsage.totals.cancelledOrders}</p>
+              </div>
+              <div className="rounded-lg bg-white border border-blue-100 px-3 py-2">
+                <p className="text-[11px] text-gray-500">ส่วนลดที่ใช้จริงสุทธิ</p>
+                <p className="text-sm font-bold text-orange-600">฿{promoUsage.totals.netDiscount.toLocaleString()}</p>
+              </div>
+              <div className="rounded-lg bg-white border border-blue-100 px-3 py-2">
+                <p className="text-[11px] text-gray-500">ยอดขายสุทธิที่ใช้คูปอง</p>
+                <p className="text-sm font-bold text-green-700">฿{promoUsage.totals.gmvNet.toLocaleString()}</p>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto rounded-lg border border-blue-100 bg-white">
+              <table className="w-full text-xs">
+                <thead className="bg-blue-50">
+                  <tr>
+                    <th className="text-left px-3 py-2 font-semibold text-blue-900">โค้ด</th>
+                    <th className="text-right px-3 py-2 font-semibold text-blue-900">ใช้ทั้งหมด</th>
+                    <th className="text-right px-3 py-2 font-semibold text-blue-900">ยกเลิก</th>
+                    <th className="text-right px-3 py-2 font-semibold text-blue-900">ใช้จริง</th>
+                    <th className="text-right px-3 py-2 font-semibold text-blue-900">ส่วนลดสุทธิ</th>
+                    <th className="text-right px-3 py-2 font-semibold text-blue-900">ยอดขายสุทธิ</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {promoUsage.rows.slice(0, 12).map((row) => (
+                    <tr key={`${row.promoId ?? "x"}-${row.code}`} className="border-t border-blue-50">
+                      <td className="px-3 py-2">
+                        <p className="font-semibold text-gray-900">{row.code}</p>
+                        {row.description && <p className="text-[11px] text-gray-400">{row.description}</p>}
+                      </td>
+                      <td className="px-3 py-2 text-right text-gray-700">{row.ordersWithPromo}</td>
+                      <td className="px-3 py-2 text-right text-rose-600">{row.cancelledOrders}</td>
+                      <td className="px-3 py-2 text-right text-gray-700">{row.netOrders}</td>
+                      <td className="px-3 py-2 text-right font-semibold text-orange-600">฿{row.netDiscount.toLocaleString()}</td>
+                      <td className="px-3 py-2 text-right font-semibold text-green-700">฿{row.gmvNet.toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        ) : (
+          <div className="text-xs text-blue-700">ยังไม่มีข้อมูลการใช้งานคูปองในช่วงเวลานี้</div>
+        )}
       </div>
 
       {showForm && (
