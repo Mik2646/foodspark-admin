@@ -2,29 +2,50 @@
 import { useState } from "react";
 import Link from "next/link";
 import { trpc } from "@/lib/trpc";
-import { CheckCircle, XCircle, ToggleLeft, ToggleRight } from "lucide-react";
+import { CheckCircle, XCircle, ToggleLeft, ToggleRight, Pencil, Trash2 } from "lucide-react";
 
 export default function RestaurantsPage() {
   const { data: restaurants = [], isLoading, refetch } = trpc.admin.listRestaurants.useQuery();
   const { data: users = [] } = trpc.admin.listUsers.useQuery();
   const assign = trpc.admin.assignRestaurant.useMutation({ onSuccess: () => refetch() });
   const toggle = trpc.admin.toggleRestaurant.useMutation({ onSuccess: () => refetch() });
+  const deleteRestaurant = trpc.admin.deleteRestaurant.useMutation({ onSuccess: () => refetch() });
   const [assigningId, setAssigningId] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const merchants = users.filter(u => u.role === "merchant" || u.role === "admin");
 
   async function handleAssign(restaurantId: string, ownerId: number | null) {
     if (ownerId === null) return;
-    setAssigningId(restaurantId);
-    await assign.mutateAsync({ restaurantId, ownerId });
-    setAssigningId(null);
+    try {
+      setAssigningId(restaurantId);
+      await assign.mutateAsync({ restaurantId, ownerId });
+    } finally {
+      setAssigningId(null);
+    }
   }
 
   async function handleToggle(restaurantId: string, isOpen: boolean) {
-    setTogglingId(restaurantId);
-    await toggle.mutateAsync({ restaurantId, isOpen });
-    setTogglingId(null);
+    try {
+      setTogglingId(restaurantId);
+      await toggle.mutateAsync({ restaurantId, isOpen });
+    } finally {
+      setTogglingId(null);
+    }
+  }
+
+  async function handleDelete(restaurantId: string, name: string) {
+    if (!confirm(`ต้องการลบร้าน "${name}" ใช่หรือไม่?\nเมนูและรายการโปรดของร้านนี้จะถูกลบด้วย`)) return;
+    try {
+      setDeletingId(restaurantId);
+      await deleteRestaurant.mutateAsync({ restaurantId });
+      alert("ลบร้านอาหารสำเร็จ");
+    } catch (error: any) {
+      alert(error?.message ?? "ลบร้านอาหารไม่สำเร็จ");
+    } finally {
+      setDeletingId(null);
+    }
   }
 
   if (isLoading) return <div className="text-gray-400 text-sm">กำลังโหลด...</div>;
@@ -37,7 +58,8 @@ export default function RestaurantsPage() {
       </div>
 
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[1120px] text-sm">
           <thead>
             <tr className="border-b border-gray-100 bg-gray-50">
               <th className="text-left px-4 py-3 font-medium text-gray-600">ID</th>
@@ -47,6 +69,7 @@ export default function RestaurantsPage() {
               <th className="text-left px-4 py-3 font-medium text-gray-600">เจ้าของ</th>
               <th className="text-left px-4 py-3 font-medium text-gray-600">มอบหมายให้</th>
               <th className="text-left px-4 py-3 font-medium text-gray-600">เปิด/ปิด</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-600">จัดการ</th>
             </tr>
           </thead>
           <tbody>
@@ -101,11 +124,31 @@ export default function RestaurantsPage() {
                       )}
                     </button>
                   </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <Link
+                        href={`/dashboard/restaurants/${r.id}`}
+                        className="inline-flex items-center justify-center p-1.5 rounded-lg text-gray-500 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                        title="แก้ไขร้าน"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </Link>
+                      <button
+                        onClick={() => handleDelete(r.id, r.name)}
+                        disabled={deletingId === r.id}
+                        className="inline-flex items-center justify-center p-1.5 rounded-lg text-gray-500 hover:text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
+                        title="ลบร้าน"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </td>
                 </tr>
               );
             })}
           </tbody>
         </table>
+        </div>
         {restaurants.length === 0 && (
           <div className="text-center py-10 text-gray-400 text-sm">ไม่มีร้านอาหาร</div>
         )}
