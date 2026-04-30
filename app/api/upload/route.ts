@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const RAILWAY_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "https://foodspark-production.up.railway.app";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "https://apifoodspark.techsparks-co-th.com";
 
 export async function POST(req: NextRequest) {
   try {
     const auth = req.headers.get("authorization") ?? "";
     const body = await req.json();
 
-    const resp = await fetch(`${RAILWAY_URL}/api/upload`, {
+    const resp = await fetch(`${API_BASE_URL}/api/upload`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
