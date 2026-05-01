@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "https://apifoodspark.techsparks-co-th.com";
+import { API_BASE_URL } from "@/lib/config";
 
 export async function POST(req: NextRequest) {
   try {
@@ -18,7 +17,8 @@ export async function POST(req: NextRequest) {
 
     const data = await resp.json();
     return NextResponse.json(data, { status: resp.status });
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message ?? "proxy error" }, { status: 500 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "proxy error";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
