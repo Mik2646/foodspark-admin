@@ -1,12 +1,13 @@
 import { createTRPCReact } from "@trpc/react-query";
 import { httpBatchLink } from "@trpc/client";
 import superjson from "superjson";
-import type { AppRouter } from "../../foodspark/server/routers";
 import { API_BASE_URL } from "@/lib/config";
 import { getSessionToken } from "@/lib/auth";
 
-export type { AppRouter };
-export const trpc = createTRPCReact<AppRouter>();
+type AdminRouter = any;
+
+export type AppRouter = AdminRouter;
+export const trpc: any = createTRPCReact<AppRouter>();
 
 export function getToken(): string | null {
   return getSessionToken();

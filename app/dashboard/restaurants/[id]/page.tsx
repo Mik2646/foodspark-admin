@@ -62,7 +62,7 @@ export default function RestaurantDetailPage({ params }: { params: Promise<{ id:
   if (!data) return <div className="text-red-500 text-sm">ไม่พบร้านอาหาร</div>;
 
   const { restaurant: r, menu, owner } = data;
-  const menuCategories = [...new Set(menu.map((m) => m.category))];
+  const menuCategories = [...new Set<string>(menu.map((m) => String(m.category ?? "")))];
 
   const startEditInfo = () => {
     setInfoForm({
