@@ -192,25 +192,42 @@ export default function RestaurantDetailPage({ params }: { params: Promise<{ id:
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {[
-                  { label: "ชื่อร้าน", key: "name" },
-                  { label: "หมวดหมู่", key: "category" },
-                  { label: "เวลาส่ง (เช่น 30-45)", key: "deliveryTime" },
-                  { label: "ค่าส่ง (฿)", key: "deliveryFee", type: "number" },
-                  { label: "สั่งขั้นต่ำ (฿)", key: "minOrder", type: "number" },
-                  { label: "ที่อยู่", key: "address" },
-                  { label: "ข้อความโปรโมชัน", key: "promoText" },
-                ].map(({ label, key, type }) => (
-                  <div key={key}>
-                    <label className="block text-xs font-medium text-gray-500 mb-1">{label}</label>
-                    <input
-                      type={type ?? "text"}
-                      value={String(infoForm[key] ?? "")}
-                      onChange={(e) => setInfoForm((f) => ({ ...f, [key]: e.target.value }))}
-                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300"
-                    />
+                {(() => {
+                  // ค่าส่ง (deliveryFee) only applies when the merchant runs
+                  // their OWN delivery (hasOwnDelivery=true). Otherwise the
+                  // platform calculates the fee from distance using the system
+                  // policy (admin → ค่าจัดส่ง) and this field becomes confusing
+                  // — admins were setting it to 0 and seeing "฿0" on the LIFF.
+                  const fields: Array<{ label: string; key: string; type?: string }> = [
+                    { label: "ชื่อร้าน", key: "name" },
+                    { label: "หมวดหมู่", key: "category" },
+                    { label: "เวลาส่ง (เช่น 30-45)", key: "deliveryTime" },
+                  ];
+                  if (r.hasOwnDelivery) {
+                    fields.push({ label: "ค่าส่ง (฿)", key: "deliveryFee", type: "number" });
+                  }
+                  fields.push(
+                    { label: "สั่งขั้นต่ำ (฿)", key: "minOrder", type: "number" },
+                    { label: "ที่อยู่", key: "address" },
+                    { label: "ข้อความโปรโมชัน", key: "promoText" },
+                  );
+                  return fields.map(({ label, key, type }) => (
+                    <div key={key}>
+                      <label className="block text-xs font-medium text-gray-500 mb-1">{label}</label>
+                      <input
+                        type={type ?? "text"}
+                        value={String(infoForm[key] ?? "")}
+                        onChange={(e) => setInfoForm((f) => ({ ...f, [key]: e.target.value }))}
+                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300"
+                      />
+                    </div>
+                  ));
+                })()}
+                {!r.hasOwnDelivery && (
+                  <div className="md:col-span-2 -mt-1 text-[11px] text-gray-500 bg-orange-50 border border-orange-100 rounded-lg px-3 py-2">
+                    💡 ค่าส่งของร้านนี้คำนวณจากระยะทางตามนโยบายระบบโดยอัตโนมัติ (ตั้งค่าได้ที่ <span className="font-semibold">ตั้งค่าระบบ → ค่าจัดส่ง</span>) ร้านที่ส่งเองให้เปิด <span className="font-semibold">"ร้านส่งเอง"</span> ในหน้าตั้งค่าจัดส่ง
                   </div>
-                ))}
+                )}
                 <div className="flex items-center gap-2 pt-4">
                   <input type="checkbox" id="isPromo" checked={Boolean(infoForm.isPromo)}
                     onChange={(e) => setInfoForm((f) => ({ ...f, isPromo: e.target.checked }))}
@@ -284,7 +301,15 @@ export default function RestaurantDetailPage({ params }: { params: Promise<{ id:
             {[
               { icon: Star, label: "คะแนน", value: `${r.rating ?? 0} (${r.reviewCount ?? 0})`, color: "text-yellow-500" },
               { icon: Clock, label: "เวลาส่ง", value: `${r.deliveryTime} นาที`, color: "text-blue-500" },
-              { icon: Truck, label: "ค่าส่ง", value: `฿${r.deliveryFee}`, color: "text-orange-500" },
+              {
+                icon: Truck,
+                label: "ค่าส่ง",
+                // Show actual fee for own-delivery shops; otherwise label as
+                // "ตามระยะทาง" so the admin understands the platform calculates
+                // it per-order, not a fixed ฿0.
+                value: r.hasOwnDelivery ? `฿${r.deliveryFee}` : "ตามระยะทาง",
+                color: "text-orange-500",
+              },
               { icon: Package, label: "สั่งขั้นต่ำ", value: `฿${r.minOrder}`, color: "text-purple-500" },
             ].map(({ icon: Icon, label, value, color }) => (
               <div key={label} className="p-4 text-center">
