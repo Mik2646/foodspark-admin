@@ -4,11 +4,16 @@ import { useState } from "react";
 import { Share2, Check, Copy } from "lucide-react";
 
 /**
- * Public web URL for the customer restaurant page. Same host the
- * customer + merchant apps share to in foodspark-web/lib/shareUrl.ts.
- * Inlined here because the admin app doesn't import from that repo.
+ * LIFF Mini App URL — primary share target. Renders as a rich Mini App
+ * card in LINE chat. Channel is published (no dev-tester gating).
+ *
+ * Web fallback is the same path under the public web host — used by
+ * non-LINE channels (FB, iMessage) where LIFF redirects look broken.
+ *
+ * Both inlined here (rather than imported from foodspark-web/lib/shareUrl)
+ * because the admin app is a separate repo and doesn't reach into web.
  */
-const WEB_HOST = "https://foodspark.techsparks-co-th.com";
+const LIFF_HOST = "https://miniapp.line.me/2009717156-bs0ZsDc6";
 
 type Props = {
   restaurantId: string;
@@ -46,7 +51,7 @@ export default function ShareRestaurantButton({
     if (busy) return;
     setBusy(true);
     try {
-      const url = `${WEB_HOST}/liff/restaurant/${encodeURIComponent(restaurantId)}`;
+      const url = `${LIFF_HOST}/liff/restaurant/${encodeURIComponent(restaurantId)}`;
       const lines = [`🍔 ${restaurantName} บน FoodSpark`];
       if (category) lines.push(`หมวด: ${category}`);
       lines.push("กดลิงก์เพื่อสั่งอาหารเลย 👇");
