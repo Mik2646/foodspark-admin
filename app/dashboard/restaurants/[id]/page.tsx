@@ -71,6 +71,11 @@ export default function RestaurantDetailPage({ params }: { params: Promise<{ id:
       imageUrl: r.imageUrl, coverUrl: r.coverUrl,
       isPromo: r.isPromo, promoText: r.promoText ?? "",
       address: r.address ?? "",
+      // Self-delivery controls — read from row, fall back to safe defaults.
+      hasOwnDelivery: Boolean((r as { hasOwnDelivery?: boolean | null }).hasOwnDelivery),
+      selfDeliveryMinOrder: String((r as { selfDeliveryMinOrder?: number | null }).selfDeliveryMinOrder ?? 0),
+      ownDeliveryRadiusKm: String((r as { ownDeliveryRadiusKm?: number | null }).ownDeliveryRadiusKm ?? 5),
+      acceptsPlatformRider: (r as { acceptsPlatformRider?: boolean | null }).acceptsPlatformRider !== false,
     });
     setEditingInfo(true);
   };
@@ -88,6 +93,11 @@ export default function RestaurantDetailPage({ params }: { params: Promise<{ id:
       isPromo: Boolean(infoForm.isPromo),
       promoText: String(infoForm.promoText || ""),
       address: String(infoForm.address || ""),
+      // Self-delivery
+      hasOwnDelivery: Boolean(infoForm.hasOwnDelivery),
+      selfDeliveryMinOrder: Number(infoForm.selfDeliveryMinOrder) || 0,
+      ownDeliveryRadiusKm: Math.min(15, Math.max(0.5, Number(infoForm.ownDeliveryRadiusKm) || 5)),
+      acceptsPlatformRider: Boolean(infoForm.acceptsPlatformRider),
     });
   };
 
@@ -223,9 +233,9 @@ export default function RestaurantDetailPage({ params }: { params: Promise<{ id:
                     </div>
                   ));
                 })()}
-                {!r.hasOwnDelivery && (
+                {!Boolean(infoForm.hasOwnDelivery) && (
                   <div className="md:col-span-2 -mt-1 text-[11px] text-gray-500 bg-orange-50 border border-orange-100 rounded-lg px-3 py-2">
-                    💡 ค่าส่งของร้านนี้คำนวณจากระยะทางตามนโยบายระบบโดยอัตโนมัติ (ตั้งค่าได้ที่ <span className="font-semibold">ตั้งค่าระบบ → ค่าจัดส่ง</span>) ร้านที่ส่งเองให้เปิด <span className="font-semibold">"ร้านส่งเอง"</span> ในหน้าตั้งค่าจัดส่ง
+                    💡 ค่าส่งของร้านนี้คำนวณจากระยะทางตามนโยบายระบบโดยอัตโนมัติ (ตั้งค่าได้ที่ <span className="font-semibold">ตั้งค่าระบบ → ค่าจัดส่ง</span>) เปิด <span className="font-semibold">"ร้านส่งเอง"</span> ด้านล่างถ้าต้องการให้ร้านส่งเอง
                   </div>
                 )}
                 <div className="flex items-center gap-2 pt-4">
@@ -233,6 +243,63 @@ export default function RestaurantDetailPage({ params }: { params: Promise<{ id:
                     onChange={(e) => setInfoForm((f) => ({ ...f, isPromo: e.target.checked }))}
                     className="w-4 h-4 accent-orange-500" />
                   <label htmlFor="isPromo" className="text-sm text-gray-700">แสดง badge โปรโมชัน</label>
+                </div>
+              </div>
+
+              {/* Self-delivery section — controls who delivers each order. */}
+              <div className="rounded-xl border border-orange-100 bg-orange-50 p-3 space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-orange-700">🏍 ร้านส่งเอง</p>
+                    <p className="text-[11px] text-gray-600">
+                      สั่งครบขั้นต่ำในรัศมี → ร้านส่งฟรี (ไม่มีค่าส่งให้ลูกค้า)
+                    </p>
+                  </div>
+                  <input
+                    type="checkbox"
+                    id="hasOwnDelivery"
+                    checked={Boolean(infoForm.hasOwnDelivery)}
+                    onChange={(e) => setInfoForm((f) => ({ ...f, hasOwnDelivery: e.target.checked }))}
+                    className="w-5 h-5 accent-orange-500"
+                  />
+                </div>
+                {Boolean(infoForm.hasOwnDelivery) && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1 border-t border-orange-200">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 mb-1">🛒 ยอดขั้นต่ำเพื่อส่งฟรี (฿)</label>
+                      <input
+                        type="number"
+                        value={String(infoForm.selfDeliveryMinOrder ?? "0")}
+                        onChange={(e) => setInfoForm((f) => ({ ...f, selfDeliveryMinOrder: e.target.value }))}
+                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300"
+                        placeholder="100"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 mb-1">📍 รัศมีจัดส่ง (กม., 0.5-15)</label>
+                      <input
+                        type="number"
+                        step="0.5"
+                        value={String(infoForm.ownDeliveryRadiusKm ?? "5")}
+                        onChange={(e) => setInfoForm((f) => ({ ...f, ownDeliveryRadiusKm: e.target.value }))}
+                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300"
+                        placeholder="5"
+                      />
+                    </div>
+                  </div>
+                )}
+                <div className="flex items-center justify-between gap-3 pt-2 border-t border-orange-200">
+                  <div>
+                    <p className="text-sm font-semibold text-orange-700">⚡ รับไรเดอร์ระบบด้วย</p>
+                    <p className="text-[11px] text-gray-600">ปิดถ้าจะส่งเองเท่านั้น</p>
+                  </div>
+                  <input
+                    type="checkbox"
+                    id="acceptsPlatformRider"
+                    checked={Boolean(infoForm.acceptsPlatformRider)}
+                    onChange={(e) => setInfoForm((f) => ({ ...f, acceptsPlatformRider: e.target.checked }))}
+                    className="w-5 h-5 accent-orange-500"
+                  />
                 </div>
               </div>
 
