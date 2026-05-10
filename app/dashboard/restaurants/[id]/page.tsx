@@ -4,6 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { trpc, getToken } from "@/lib/trpc";
 import { ArrowLeft, Store, Star, Clock, Truck, ChevronRight, Package, Pencil, Plus, Trash2, Check, X, ImageIcon } from "lucide-react";
+import ShareRestaurantButton from "@/components/ShareRestaurantButton";
 
 async function uploadToR2(file: File, token: string | null): Promise<string> {
   if (file.size > 10 * 1024 * 1024) throw new Error("ไฟล์ใหญ่เกินไป (สูงสุด 10MB)");
@@ -353,9 +354,16 @@ export default function RestaurantDetailPage({ params }: { params: Promise<{ id:
                     <p className="text-sm text-gray-500 mt-1">{r.category}</p>
                     {r.address && <p className="text-sm text-gray-400 mt-0.5">{r.address}</p>}
                   </div>
-                  <button onClick={startEditInfo} className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-gray-600 text-xs font-medium rounded-lg hover:bg-gray-50 flex-shrink-0 transition-colors">
-                    <Pencil className="w-3.5 h-3.5" /> แก้ไข
-                  </button>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <ShareRestaurantButton
+                      restaurantId={r.id}
+                      restaurantName={r.name}
+                      category={r.category}
+                    />
+                    <button onClick={startEditInfo} className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-gray-600 text-xs font-medium rounded-lg hover:bg-gray-50 flex-shrink-0 transition-colors">
+                      <Pencil className="w-3.5 h-3.5" /> แก้ไข
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
