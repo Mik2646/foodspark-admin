@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { trpc } from "@/lib/trpc";
 import { Bike, Wifi, WifiOff, TrendingUp, Package, Trash2 } from "lucide-react";
 
@@ -170,8 +171,15 @@ export default function RidersPage() {
                   />
                 </td>
                 <td className="px-4 py-3">
-                  <div className="font-medium text-gray-900">{r.name ?? "—"}</div>
-                  <div className="text-xs text-gray-400">{r.email ?? r.phone ?? "—"}</div>
+                  <Link
+                    href={`/dashboard/riders/${r.id}`}
+                    className="group inline-block"
+                  >
+                    <div className="font-medium text-gray-900 group-hover:text-orange-500 group-hover:underline transition-colors">
+                      {r.name ?? "—"}
+                    </div>
+                    <div className="text-xs text-gray-400">{r.email ?? r.phone ?? "—"}</div>
+                  </Link>
                 </td>
                 <td className="px-4 py-3">
                   {r.riderOnline ? (
