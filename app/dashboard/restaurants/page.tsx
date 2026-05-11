@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { trpc } from "@/lib/trpc";
 import { CheckCircle, XCircle, ToggleLeft, ToggleRight, Pencil, Trash2 } from "lucide-react";
@@ -13,6 +13,57 @@ export default function RestaurantsPage() {
   const [assigningId, setAssigningId] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkConfirm, setBulkConfirm] = useState(false);
+  const deleteRestaurants = trpc.admin.deleteRestaurants.useMutation({
+    onSuccess: (res: any) => {
+      setBulkConfirm(false);
+      setSelected(new Set());
+      refetch();
+      const deleted = res?.deleted ?? 0;
+      const blocked = res?.blocked ?? [];
+      if (blocked.length > 0) {
+        const names = blocked.map((b: any) => `• ${b.name}`).join("\n");
+        alert(`ลบสำเร็จ ${deleted} ร้าน\n\nข้ามไป ${blocked.length} ร้าน เพราะมีออเดอร์ที่กำลังดำเนินการ:\n${names}`);
+      } else if (deleted > 0) {
+        // silent success — refetch removes them from view
+      }
+    },
+    onError: (err: any) => alert(err?.message ?? "ลบหลายรายการไม่สำเร็จ"),
+  });
+
+  // Drop selections that left the visible list
+  useEffect(() => {
+    if (selected.size === 0) return;
+    const visible = new Set(restaurants.map((r: any) => r.id));
+    const next = new Set<string>();
+    let changed = false;
+    selected.forEach((id) => {
+      if (visible.has(id)) next.add(id);
+      else changed = true;
+    });
+    if (changed) setSelected(next);
+  }, [restaurants, selected]);
+
+  const allVisibleSelected = restaurants.length > 0 && restaurants.every((r: any) => selected.has(r.id));
+  const someSelected = selected.size > 0 && !allVisibleSelected;
+  const headerCbRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (headerCbRef.current) headerCbRef.current.indeterminate = someSelected;
+  }, [someSelected]);
+
+  const toggleAll = () => {
+    if (allVisibleSelected) setSelected(new Set());
+    else setSelected(new Set(restaurants.map((r: any) => r.id)));
+  };
+  const toggleOne = (id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   const merchants = users.filter(u => u.role === "merchant" || u.role === "admin");
 
@@ -57,11 +108,44 @@ export default function RestaurantsPage() {
         <span className="text-sm text-gray-400">{restaurants.length} ร้าน</span>
       </div>
 
+      {selected.size > 0 && (
+        <div className="flex items-center justify-between mb-3 px-4 py-2.5 bg-orange-50 border border-orange-200 rounded-xl">
+          <span className="text-sm text-gray-700">
+            เลือกแล้ว <b className="text-orange-600">{selected.size}</b> ร้าน
+          </span>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setSelected(new Set())}
+              className="px-3 py-1.5 text-xs rounded-lg bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+            >
+              ยกเลิกการเลือก
+            </button>
+            <button
+              onClick={() => setBulkConfirm(true)}
+              className="px-3 py-1.5 text-xs rounded-lg bg-red-500 text-white hover:bg-red-600 transition-colors flex items-center gap-1.5"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              ลบ {selected.size} ร้าน
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
         <table className="w-full min-w-[1120px] text-sm">
           <thead>
             <tr className="border-b border-gray-100 bg-gray-50">
+              <th className="px-4 py-3 w-10">
+                <input
+                  ref={headerCbRef}
+                  type="checkbox"
+                  checked={allVisibleSelected}
+                  onChange={toggleAll}
+                  className="w-4 h-4 rounded border-gray-300 text-orange-500 focus:ring-orange-400 cursor-pointer"
+                  aria-label="เลือกทั้งหมด"
+                />
+              </th>
               <th className="text-left px-4 py-3 font-medium text-gray-600">ID</th>
               <th className="text-left px-4 py-3 font-medium text-gray-600">ชื่อร้าน</th>
               <th className="text-left px-4 py-3 font-medium text-gray-600">หมวดหมู่</th>
@@ -73,10 +157,25 @@ export default function RestaurantsPage() {
             </tr>
           </thead>
           <tbody>
-            {restaurants.map((r) => {
-              const owner = users.find(u => u.id === r.ownerId);
+            {restaurants.map((r: any) => {
+              const owner = users.find((u: any) => u.id === r.ownerId);
+              const isSelected = selected.has(r.id);
               return (
-                <tr key={r.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
+                <tr
+                  key={r.id}
+                  className={`border-b border-gray-50 transition-colors ${
+                    isSelected ? "bg-orange-50/50" : "hover:bg-gray-50/50"
+                  }`}
+                >
+                  <td className="px-4 py-3">
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => toggleOne(r.id)}
+                      className="w-4 h-4 rounded border-gray-300 text-orange-500 focus:ring-orange-400 cursor-pointer"
+                      aria-label={`เลือก ${r.name}`}
+                    />
+                  </td>
                   <td className="px-4 py-3 text-gray-400 font-mono text-xs">{r.id}</td>
                   <td className="px-4 py-3 font-medium text-gray-900">
                     <Link href={`/dashboard/restaurants/${r.id}`} className="hover:text-orange-500 hover:underline transition-colors">
@@ -153,6 +252,39 @@ export default function RestaurantsPage() {
           <div className="text-center py-10 text-gray-400 text-sm">ไม่มีร้านอาหาร</div>
         )}
       </div>
+
+      {bulkConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+            <h2 className="text-lg font-bold text-gray-900 mb-2">
+              ลบร้านอาหาร {selected.size} ร้าน?
+            </h2>
+            <p className="text-sm text-gray-500 mb-4">
+              เมนูอาหารและรายการโปรดของแต่ละร้านจะถูกลบไปด้วย — ลบถาวร ไม่สามารถย้อนกลับได้
+            </p>
+            <p className="text-xs text-gray-400 mb-5">
+              ร้านที่มีออเดอร์ที่ยังดำเนินการอยู่ (pending / preparing / delivering) จะถูกข้ามไป
+              และแจ้งให้ทราบหลังลบ
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setBulkConfirm(false)}
+                disabled={deleteRestaurants.isPending}
+                className="px-4 py-2 text-sm rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+              >
+                ยกเลิก
+              </button>
+              <button
+                onClick={() => deleteRestaurants.mutate({ restaurantIds: Array.from(selected) })}
+                disabled={deleteRestaurants.isPending}
+                className="px-4 py-2 text-sm rounded-lg bg-red-500 text-white hover:bg-red-600 disabled:opacity-50"
+              >
+                {deleteRestaurants.isPending ? "กำลังลบ..." : "ลบทั้งหมด"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
