@@ -5,6 +5,7 @@ import Image from "next/image";
 import { trpc, getToken } from "@/lib/trpc";
 import { ArrowLeft, Store, Star, Clock, Truck, ChevronRight, Package, Pencil, Plus, Trash2, Check, X, ImageIcon } from "lucide-react";
 import ShareRestaurantButton from "@/components/ShareRestaurantButton";
+import OpeningHoursEditor from "@/components/OpeningHoursEditor";
 import MenuItemForm, {
   EMPTY_MENU_ITEM_FORM,
   cleanOptionsForSubmit,
@@ -62,6 +63,13 @@ export default function RestaurantDetailPage({ params }: { params: Promise<{ id:
 
   const [editingInfo, setEditingInfo] = useState(false);
   const [infoForm, setInfoForm] = useState<Record<string, string | boolean>>({});
+  // Weekly schedule is structured data (array of 7 entries) that doesn't
+  // fit cleanly into the infoForm string/boolean record, so it lives in
+  // its own state. Synced with `r.openingHours` whenever the edit form
+  // opens via startEditInfo.
+  const [openingHours, setOpeningHours] = useState<Array<{
+    day: number; open: string; close: string; enabled: boolean;
+  }>>([]);
   const [uploading, setUploading] = useState(false);
 
   const [showItemForm, setShowItemForm] = useState(false);
@@ -91,6 +99,13 @@ export default function RestaurantDetailPage({ params }: { params: Promise<{ id:
       ownDeliveryRadiusKm: String((r as { ownDeliveryRadiusKm?: number | null }).ownDeliveryRadiusKm ?? 5),
       acceptsPlatformRider: (r as { acceptsPlatformRider?: boolean | null }).acceptsPlatformRider !== false,
     });
+    // Hydrate the weekly schedule from the row. Defensive cast — the
+    // jsonb column can hold garbage from older rows; the editor's
+    // normalizeSchedule() will sanitise.
+    const restHours = (r as { openingHours?: unknown }).openingHours;
+    setOpeningHours(Array.isArray(restHours)
+      ? (restHours as Array<{ day: number; open: string; close: string; enabled: boolean }>)
+      : []);
     setEditingInfo(true);
   };
 
@@ -112,6 +127,8 @@ export default function RestaurantDetailPage({ params }: { params: Promise<{ id:
       selfDeliveryMinOrder: Number(infoForm.selfDeliveryMinOrder) || 0,
       ownDeliveryRadiusKm: Math.min(15, Math.max(0.5, Number(infoForm.ownDeliveryRadiusKm) || 5)),
       acceptsPlatformRider: Boolean(infoForm.acceptsPlatformRider),
+      // Weekly schedule — admin override of the merchant's setting.
+      openingHours: openingHours.length > 0 ? openingHours : undefined,
     });
   };
 
@@ -277,6 +294,9 @@ export default function RestaurantDetailPage({ params }: { params: Promise<{ id:
                   <label htmlFor="isPromo" className="text-sm text-gray-700">แสดง badge โปรโมชัน</label>
                 </div>
               </div>
+
+              {/* Weekly schedule — admin can override merchant's hours. */}
+              <OpeningHoursEditor value={openingHours} onChange={setOpeningHours} />
 
               {/* Self-delivery section — controls who delivers each order. */}
               <div className="rounded-xl border border-orange-100 bg-orange-50 p-3 space-y-3">
