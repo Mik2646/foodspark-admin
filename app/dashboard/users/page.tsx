@@ -1,5 +1,6 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { trpc } from "@/lib/trpc";
 import { ShieldCheck, Store, User, Bike, Search, Trash2 } from "lucide-react";
 
@@ -11,6 +12,11 @@ const ROLE_STYLES: Record<string, string> = {
   rider: "bg-cyan-100 text-cyan-700",
 };
 const ROLE_ICONS: Record<string, React.ElementType> = { user: User, merchant: Store, admin: ShieldCheck, rider: Bike };
+const BLOCKED_REASON_LABEL: Record<string, string> = {
+  has_customer_orders: "มีประวัติสั่งอาหาร",
+  has_payouts: "มีประวัติ payout",
+  active_orders: "กำลังส่งของ",
+};
 
 export default function UsersPage() {
   const { data: users = [], isLoading, refetch } = trpc.admin.listUsers.useQuery();
@@ -18,10 +24,59 @@ export default function UsersPage() {
   const deleteUser = trpc.admin.deleteUser.useMutation({ onSuccess: () => refetch() });
   const [changingId, setChangingId] = useState<number | null>(null);
   const [search, setSearch] = useState("");
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [bulkConfirm, setBulkConfirm] = useState(false);
+  const deleteUsers = trpc.admin.deleteUsers.useMutation({
+    onSuccess: (res: any) => {
+      setBulkConfirm(false);
+      setSelected(new Set());
+      refetch();
+      const deleted = res?.deleted ?? 0;
+      const blocked = res?.blocked ?? [];
+      if (blocked.length > 0) {
+        const names = blocked.map((b: any) => `• ${b.name} — ${BLOCKED_REASON_LABEL[b.reason] ?? b.reason}`).join("\n");
+        alert(`ลบสำเร็จ ${deleted} คน\n\nข้ามไป ${blocked.length} คน:\n${names}`);
+      }
+    },
+    onError: (err: any) => alert(err?.message ?? "ลบหลายรายการไม่สำเร็จ"),
+  });
 
-  const filtered = users.filter(u =>
+  const filtered = users.filter((u: any) =>
     !search || u.name?.toLowerCase().includes(search.toLowerCase()) || u.email?.toLowerCase().includes(search.toLowerCase())
   );
+
+  // Drop selections that left the filtered view
+  useEffect(() => {
+    if (selected.size === 0) return;
+    const visible = new Set(filtered.map((u: any) => u.id));
+    const next = new Set<number>();
+    let changed = false;
+    selected.forEach((id) => {
+      if (visible.has(id)) next.add(id);
+      else changed = true;
+    });
+    if (changed) setSelected(next);
+  }, [filtered, selected]);
+
+  const allVisibleSelected = filtered.length > 0 && filtered.every((u: any) => selected.has(u.id));
+  const someSelected = selected.size > 0 && !allVisibleSelected;
+  const headerCbRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (headerCbRef.current) headerCbRef.current.indeterminate = someSelected;
+  }, [someSelected]);
+
+  const toggleAll = () => {
+    if (allVisibleSelected) setSelected(new Set());
+    else setSelected(new Set(filtered.map((u: any) => u.id)));
+  };
+  const toggleOne = (id: number) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   async function handleRoleChange(userId: number, role: "user" | "merchant" | "admin" | "rider") {
     setChangingId(userId);
@@ -54,10 +109,43 @@ export default function UsersPage() {
         />
       </div>
 
+      {selected.size > 0 && (
+        <div className="flex items-center justify-between mb-3 px-4 py-2.5 bg-orange-50 border border-orange-200 rounded-xl">
+          <span className="text-sm text-gray-700">
+            เลือกแล้ว <b className="text-orange-600">{selected.size}</b> คน
+          </span>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setSelected(new Set())}
+              className="px-3 py-1.5 text-xs rounded-lg bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+            >
+              ยกเลิกการเลือก
+            </button>
+            <button
+              onClick={() => setBulkConfirm(true)}
+              className="px-3 py-1.5 text-xs rounded-lg bg-red-500 text-white hover:bg-red-600 transition-colors flex items-center gap-1.5"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              ลบ {selected.size} คน
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-100 bg-gray-50">
+              <th className="px-4 py-3 w-10">
+                <input
+                  ref={headerCbRef}
+                  type="checkbox"
+                  checked={allVisibleSelected}
+                  onChange={toggleAll}
+                  className="w-4 h-4 rounded border-gray-300 text-orange-500 focus:ring-orange-400 cursor-pointer"
+                  aria-label="เลือกทั้งหมด"
+                />
+              </th>
               <th className="text-left px-4 py-3 font-medium text-gray-600">ID</th>
               <th className="text-left px-4 py-3 font-medium text-gray-600">ชื่อ</th>
               <th className="text-left px-4 py-3 font-medium text-gray-600">อีเมล</th>
@@ -68,13 +156,32 @@ export default function UsersPage() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map((u) => {
+            {filtered.map((u: any) => {
               const role = u.role ?? "user";
               const RoleIcon = ROLE_ICONS[role] ?? User;
+              const isSelected = selected.has(u.id);
               return (
-                <tr key={u.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
+                <tr
+                  key={u.id}
+                  className={`border-b border-gray-50 transition-colors ${
+                    isSelected ? "bg-orange-50/50" : "hover:bg-gray-50/50"
+                  }`}
+                >
+                  <td className="px-4 py-3">
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => toggleOne(u.id)}
+                      className="w-4 h-4 rounded border-gray-300 text-orange-500 focus:ring-orange-400 cursor-pointer"
+                      aria-label={`เลือก ${u.name ?? u.email ?? u.id}`}
+                    />
+                  </td>
                   <td className="px-4 py-3 text-gray-400 text-xs">{u.id}</td>
-                  <td className="px-4 py-3 font-medium text-gray-900">{u.name ?? "—"}</td>
+                  <td className="px-4 py-3 font-medium text-gray-900">
+                    <Link href={`/dashboard/users/${u.id}`} className="hover:text-orange-500 hover:underline transition-colors">
+                      {u.name ?? "—"}
+                    </Link>
+                  </td>
                   <td className="px-4 py-3 text-gray-500">{u.email ?? "—"}</td>
                   <td className="px-4 py-3 text-gray-400 text-xs">
                     {u.lastSignedIn ? new Date(u.lastSignedIn).toLocaleDateString("th-TH") : "—"}
@@ -116,6 +223,42 @@ export default function UsersPage() {
           <div className="text-center py-10 text-gray-400 text-sm">ไม่พบผู้ใช้</div>
         )}
       </div>
+
+      {bulkConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+            <h2 className="text-lg font-bold text-gray-900 mb-2">
+              ลบผู้ใช้ {selected.size} คน?
+            </h2>
+            <p className="text-sm text-gray-500 mb-4">
+              ลบถาวร — รายการโปรด, ที่อยู่จัดส่ง, เติม wallet, ธุรกรรม wallet, สิทธิ์ admin ของผู้ใช้จะถูกลบ
+              ร้านอาหารที่ผู้ใช้เป็นเจ้าของจะคงอยู่แต่ช่อง "เจ้าของ" จะกลายเป็นว่าง
+            </p>
+            <p className="text-xs text-gray-400 mb-5">
+              ข้ามผู้ใช้ที่:
+              <br />• มีประวัติสั่งอาหาร (เก็บข้อมูลออเดอร์ไว้)
+              <br />• มี payout record (financial settlement)
+              <br />• กำลังส่งของในออเดอร์ active
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setBulkConfirm(false)}
+                disabled={deleteUsers.isPending}
+                className="px-4 py-2 text-sm rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+              >
+                ยกเลิก
+              </button>
+              <button
+                onClick={() => deleteUsers.mutate({ userIds: Array.from(selected) })}
+                disabled={deleteUsers.isPending}
+                className="px-4 py-2 text-sm rounded-lg bg-red-500 text-white hover:bg-red-600 disabled:opacity-50"
+              >
+                {deleteUsers.isPending ? "กำลังลบ..." : "ลบทั้งหมด"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
