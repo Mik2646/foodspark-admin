@@ -16,24 +16,7 @@ import {
   buildMenuDescription,
   parseMenuMeta,
 } from "@/lib/menuMeta";
-
-async function uploadToR2(file: File, token: string | null): Promise<string> {
-  if (file.size > 10 * 1024 * 1024) throw new Error("ไฟล์ใหญ่เกินไป (สูงสุด 10MB)");
-  const base64 = await new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve((reader.result as string).split(",")[1]);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-  const res = await fetch("/api/upload", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-    body: JSON.stringify({ base64, mimeType: file.type }),
-  });
-  const data = await res.json();
-  if (!data.url) throw new Error(data.error ?? "อัปโหลดไม่สำเร็จ");
-  return data.url;
-}
+import { uploadToR2 } from "@/lib/upload";
 
 // Old plain-shape kept here only because typecheck on `handleItemUpload`
 // uses the shape — internally the form state is now MenuItemFormData

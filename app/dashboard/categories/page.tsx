@@ -1,5 +1,6 @@
 "use client";
 import { trpc, getToken } from "@/lib/trpc";
+import { uploadToR2 } from "@/lib/upload";
 import Image from "next/image";
 import { useState } from "react";
 import { Plus, Pencil, Trash2, GripVertical, ImagePlus } from "lucide-react";
@@ -17,24 +18,6 @@ const EMPTY_FORM: CategoryFormState = {
   imageUrl: "",
   sortOrder: "",
 };
-
-async function uploadToR2(file: File, token: string | null): Promise<string> {
-  if (file.size > 10 * 1024 * 1024) throw new Error("ไฟล์ใหญ่เกินไป (สูงสุด 10MB)");
-  const base64 = await new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve((reader.result as string).split(",")[1]);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-  const res = await fetch("/api/upload", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-    body: JSON.stringify({ base64, mimeType: file.type }),
-  });
-  const data = await res.json();
-  if (!data.url) throw new Error(data.error ?? "อัปโหลดไม่สำเร็จ");
-  return data.url;
-}
 
 export default function CategoriesPage() {
   const utils = trpc.useUtils();
