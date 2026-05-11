@@ -127,7 +127,9 @@ export default function MenuItemForm({
             onChange={(e) => setForm((f) => ({ ...f, isPopular: e.target.checked }))}
             className="w-4 h-4 accent-orange-500"
           />
-          <label htmlFor="popular" className="text-sm text-gray-700">ดีลแฟลช (ยอดนิยม)</label>
+          <label htmlFor="popular" className="text-sm text-gray-700">
+            ⭐ เมนูแนะนำ <span className="text-gray-400 text-xs">(แสดงเด่นในหน้าร้านของลูกค้า)</span>
+          </label>
         </div>
       </div>
 
