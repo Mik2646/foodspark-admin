@@ -5,6 +5,16 @@ import Image from "next/image";
 import { trpc, getToken } from "@/lib/trpc";
 import { ArrowLeft, Store, Star, Clock, Truck, ChevronRight, Package, Pencil, Plus, Trash2, Check, X, ImageIcon } from "lucide-react";
 import ShareRestaurantButton from "@/components/ShareRestaurantButton";
+import MenuItemForm, {
+  EMPTY_MENU_ITEM_FORM,
+  cleanOptionsForSubmit,
+  type MenuItemFormData,
+} from "@/components/MenuItemForm";
+import { cloneOptions, type OptionGroup } from "@/components/OptionBuilder";
+import {
+  buildMenuDescription,
+  parseMenuMeta,
+} from "@/lib/menuMeta";
 
 async function uploadToR2(file: File, token: string | null): Promise<string> {
   if (file.size > 10 * 1024 * 1024) throw new Error("ไฟล์ใหญ่เกินไป (สูงสุด 10MB)");
@@ -24,7 +34,10 @@ async function uploadToR2(file: File, token: string | null): Promise<string> {
   return data.url;
 }
 
-const EMPTY_ITEM = { name: "", description: "", price: "", imageUrl: "", category: "", isPopular: false };
+// Old plain-shape kept here only because typecheck on `handleItemUpload`
+// uses the shape — internally the form state is now MenuItemFormData
+// (full feature parity with the merchant app: menu meta + options).
+const EMPTY_ITEM: MenuItemFormData = EMPTY_MENU_ITEM_FORM;
 
 export default function RestaurantDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -52,11 +65,11 @@ export default function RestaurantDetailPage({ params }: { params: Promise<{ id:
   const [uploading, setUploading] = useState(false);
 
   const [showItemForm, setShowItemForm] = useState(false);
-  const [itemForm, setItemForm] = useState({ ...EMPTY_ITEM });
+  const [itemForm, setItemForm] = useState<MenuItemFormData>({ ...EMPTY_ITEM });
   const [itemUploading, setItemUploading] = useState(false);
 
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
-  const [editItemForm, setEditItemForm] = useState({ ...EMPTY_ITEM });
+  const [editItemForm, setEditItemForm] = useState<MenuItemFormData>({ ...EMPTY_ITEM });
   const [editItemUploading, setEditItemUploading] = useState(false);
 
   if (isLoading) return <div className="text-gray-400 text-sm">กำลังโหลด...</div>;
@@ -113,45 +126,63 @@ export default function RestaurantDetailPage({ params }: { params: Promise<{ id:
 
   const handleAddItem = () => {
     if (!itemForm.name.trim() || !itemForm.category.trim() || !itemForm.price) return;
+    // Pack the menu-meta marker (sold-out / stock / schedule / prep time)
+    // into the description string so the LIFF can parse it back out on
+    // render — same protocol the merchant app uses.
+    const packedDescription = buildMenuDescription(itemForm.description.trim(), itemForm.meta);
+    const cleanedOptions = cleanOptionsForSubmit(itemForm.options);
     createItem.mutate({
       restaurantId: id,
       name: itemForm.name.trim(),
-      description: itemForm.description.trim() || undefined,
+      description: packedDescription,
       price: Number(itemForm.price),
       imageUrl: itemForm.imageUrl.trim(),
       category: itemForm.category.trim(),
       isPopular: itemForm.isPopular,
+      options: cleanedOptions.length > 0 ? cleanedOptions : undefined,
     });
   };
 
   const startEditItem = (item: typeof menu[0]) => {
     setEditingItemId(item.id);
+    // Unpack the menu-meta marker out of the stored description so the
+    // form populates with the live meta state (toggles + schedule
+    // window + stock count) — without this the meta would only round-
+    // trip if the admin re-typed every field.
+    const { plainDescription, meta } = parseMenuMeta(item.description ?? "");
+    const opts = (item as unknown as { options?: OptionGroup[] | null }).options;
     setEditItemForm({
       name: item.name,
-      description: item.description ?? "",
+      description: plainDescription,
       price: String(item.price),
       imageUrl: item.imageUrl,
       category: item.category,
       isPopular: item.isPopular,
+      meta,
+      options: cloneOptions(opts ?? null),
     });
   };
 
   const handleSaveItem = () => {
     if (!editingItemId) return;
+    const packedDescription = buildMenuDescription(editItemForm.description.trim(), editItemForm.meta);
+    const cleanedOptions = cleanOptionsForSubmit(editItemForm.options);
     updateItem.mutate({
       id: editingItemId,
       name: editItemForm.name.trim(),
-      description: editItemForm.description.trim() || undefined,
+      description: packedDescription,
       price: Number(editItemForm.price),
       imageUrl: editItemForm.imageUrl.trim(),
       category: editItemForm.category.trim(),
       isPopular: editItemForm.isPopular,
+      options: cleanedOptions,
     });
   };
 
   const handleItemUpload = async (
-    field: "imageUrl", file: File,
-    setForm: (fn: (f: typeof EMPTY_ITEM) => typeof EMPTY_ITEM) => void,
+    field: "imageUrl",
+    file: File,
+    setForm: React.Dispatch<React.SetStateAction<MenuItemFormData>>,
     setLoading: (v: boolean) => void,
   ) => {
     setLoading(true);
@@ -427,52 +458,19 @@ export default function RestaurantDetailPage({ params }: { params: Promise<{ id:
           </button>
         </div>
 
-        {/* Add Item Form */}
+        {/* Add Item Form — full feature parity with merchant menu manager:
+            name/category/price/image + sold-out/stock/schedule/prep meta +
+            customisation groups (OptionBuilder). */}
         {showItemForm && (
           <div className="px-6 py-4 bg-orange-50 border-b border-orange-100">
             <p className="text-sm font-semibold text-gray-700 mb-3">เพิ่มเมนูใหม่</p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
-              {[
-                { label: "ชื่อเมนู *", key: "name" },
-                { label: "หมวดหมู่เมนู *", key: "category" },
-                { label: "ราคา (฿) *", key: "price", type: "number" },
-                { label: "คำอธิบาย", key: "description" },
-              ].map(({ label, key, type }) => (
-                <div key={key}>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">{label}</label>
-                  <input
-                    type={type ?? "text"}
-                    value={String((itemForm as any)[key] ?? "")}
-                    onChange={(e) => setItemForm((f) => ({ ...f, [key]: e.target.value }))}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300 bg-white"
-                  />
-                </div>
-              ))}
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">อัปโหลดรูป</label>
-                <input type="file" accept="image/*"
-                  onChange={(e) => { const f = e.target.files?.[0]; if (f) handleItemUpload("imageUrl", f, setItemForm as any, setItemUploading); }}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white file:mr-3 file:py-1 file:px-3 file:rounded-md file:border-0 file:bg-orange-50 file:text-orange-600 file:font-medium" />
-                {itemUploading && <p className="text-xs text-orange-500 mt-1">⏳ กำลังอัปโหลด...</p>}
-                {itemForm.imageUrl && (
-                  <Image
-                    src={itemForm.imageUrl}
-                    alt="ตัวอย่างรูปเมนูใหม่"
-                    width={112}
-                    height={56}
-                    unoptimized
-                    className="h-14 mt-2 rounded-lg object-cover border border-gray-100"
-                  />
-                )}
-              </div>
-              <div className="flex items-center gap-2 pt-4">
-                <input type="checkbox" id="newIsPopular" checked={itemForm.isPopular}
-                  onChange={(e) => setItemForm((f) => ({ ...f, isPopular: e.target.checked }))}
-                  className="w-4 h-4 accent-orange-500" />
-                <label htmlFor="newIsPopular" className="text-sm text-gray-700">ดีลแฟลช (ยอดนิยม)</label>
-              </div>
-            </div>
-            <div className="flex gap-2">
+            <MenuItemForm
+              form={itemForm}
+              setForm={setItemForm}
+              uploading={itemUploading}
+              onUpload={(file) => handleItemUpload("imageUrl", file, setItemForm, setItemUploading)}
+            />
+            <div className="flex gap-2 mt-4">
               <button onClick={handleAddItem} disabled={createItem.isPending || itemUploading || !itemForm.name.trim() || !itemForm.category.trim() || !itemForm.price}
                 className="px-4 py-2 bg-orange-500 text-white text-sm font-semibold rounded-lg disabled:opacity-50 hover:bg-orange-600 transition-colors">
                 {createItem.isPending ? "กำลังเพิ่ม..." : "เพิ่มเมนู"}
@@ -498,48 +496,13 @@ export default function RestaurantDetailPage({ params }: { params: Promise<{ id:
                   <div key={item.id} className="border-b border-gray-50 last:border-0">
                     {editingItemId === item.id ? (
                       <div className="px-6 py-4 bg-blue-50">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
-                          {[
-                            { label: "ชื่อเมนู", key: "name" },
-                            { label: "หมวดหมู่", key: "category" },
-                            { label: "ราคา (฿)", key: "price", type: "number" },
-                            { label: "คำอธิบาย", key: "description" },
-                          ].map(({ label, key, type }) => (
-                            <div key={key}>
-                              <label className="block text-xs font-medium text-gray-500 mb-1">{label}</label>
-                              <input
-                                type={type ?? "text"}
-                                value={String((editItemForm as any)[key] ?? "")}
-                                onChange={(e) => setEditItemForm((f) => ({ ...f, [key]: e.target.value }))}
-                                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white"
-                              />
-                            </div>
-                          ))}
-                          <div>
-                            <label className="block text-xs font-medium text-gray-500 mb-1">อัปโหลดรูป</label>
-                            <input type="file" accept="image/*"
-                              onChange={(e) => { const f = e.target.files?.[0]; if (f) handleItemUpload("imageUrl", f, setEditItemForm as any, setEditItemUploading); }}
-                              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white file:mr-3 file:py-1 file:px-3 file:rounded-md file:border-0 file:bg-blue-50 file:text-blue-600 file:font-medium" />
-                            {editItemUploading && <p className="text-xs text-blue-500 mt-1">⏳ กำลังอัปโหลด...</p>}
-                            {editItemForm.imageUrl && (
-                              <Image
-                                src={editItemForm.imageUrl}
-                                alt="ตัวอย่างรูปเมนูที่แก้ไข"
-                                width={112}
-                                height={56}
-                                unoptimized
-                                className="h-14 mt-2 rounded-lg object-cover border border-gray-100"
-                              />
-                            )}
-                          </div>
-                          <div className="flex items-center gap-2 pt-4">
-                            <input type="checkbox" checked={editItemForm.isPopular}
-                              onChange={(e) => setEditItemForm((f) => ({ ...f, isPopular: e.target.checked }))}
-                              className="w-4 h-4 accent-orange-500" />
-                            <span className="text-sm text-gray-700">ดีลแฟลช (ยอดนิยม)</span>
-                          </div>
-                        </div>
-                        <div className="flex gap-2">
+                        <MenuItemForm
+                          form={editItemForm}
+                          setForm={setEditItemForm}
+                          uploading={editItemUploading}
+                          onUpload={(file) => handleItemUpload("imageUrl", file, setEditItemForm, setEditItemUploading)}
+                        />
+                        <div className="flex gap-2 mt-4">
                           <button onClick={handleSaveItem} disabled={updateItem.isPending || editItemUploading}
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-500 text-white text-xs font-semibold rounded-lg disabled:opacity-50">
                             <Check className="w-3.5 h-3.5" />บันทึก
@@ -567,7 +530,15 @@ export default function RestaurantDetailPage({ params }: { params: Promise<{ id:
                         )}
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium text-gray-900 truncate">{item.name}</p>
-                          {item.description && <p className="text-xs text-gray-400 truncate mt-0.5">{item.description}</p>}
+                          {item.description && (() => {
+                            // Hide the embedded menu-meta marker so the
+                            // raw "<!-- foodspark-menu-meta:{...} -->"
+                            // doesn't bleed into the admin's item list.
+                            const { plainDescription } = parseMenuMeta(item.description);
+                            return plainDescription ? (
+                              <p className="text-xs text-gray-400 truncate mt-0.5">{plainDescription}</p>
+                            ) : null;
+                          })()}
                         </div>
                         <div className="flex items-center gap-3 flex-shrink-0">
                           <div className="text-right">
