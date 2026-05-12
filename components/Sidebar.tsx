@@ -1,7 +1,9 @@
 "use client";
+import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { clearSession } from "@/lib/auth";
+import { ensureNotificationPermission, flashTitle, playNewOrderChime, showBrowserNotification } from "@/lib/notifyClient";
 import {
   AlertTriangle,
   Bell,
@@ -54,6 +56,26 @@ export function Sidebar() {
   );
   const pendingCount = pending.length;
   const unreadCount = unreadNotifications.length;
+
+  // Ask once per session — only relevant when admin actually uses the panel
+  useEffect(() => { ensureNotificationPermission(); }, []);
+
+  // Watch the unread count: any increase = something new arrived since the
+  // last 15s poll. Beep + system notification + flashing title catch the
+  // admin even if they're on another tab.
+  const prevCountRef = useRef<number | null>(null);
+  useEffect(() => {
+    const prev = prevCountRef.current;
+    if (prev != null && unreadCount > prev) {
+      const newest: any = (unreadNotifications as any)[0];
+      const title = newest?.title ?? "🛒 ออเดอร์ใหม่";
+      const message = newest?.message ?? `มีแจ้งเตือนใหม่ ${unreadCount - prev} รายการ`;
+      playNewOrderChime();
+      showBrowserNotification(title, message);
+      flashTitle(`🔔 (${unreadCount}) ${title}`);
+    }
+    prevCountRef.current = unreadCount;
+  }, [unreadCount, unreadNotifications]);
 
   function handleLogout() {
     clearSession();
