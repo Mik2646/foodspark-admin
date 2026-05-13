@@ -1195,6 +1195,163 @@ function AppAvailabilityCard() {
   );
 }
 
+/**
+ * HomeCardsCard — admin uploads hero images for the two mode-selector
+ * cards at the top of the customer home screen ("สั่งอาหาร" + "ช้อป
+ * ตลาดนัด"). The customer apps pick the URLs up through
+ * `trpc.auth.getHomeCards` and render them full-bleed.
+ */
+function HomeCardsCard() {
+  const utils = trpc.useUtils();
+  const { data: settingsRaw } = trpc.admin.getSettings.useQuery();
+  const updateSettings = trpc.admin.updateSettings.useMutation({
+    onSuccess: async () => {
+      await utils.admin.getSettings.invalidate();
+      setNotice({ type: "success", message: "บันทึกแล้ว" });
+      setTimeout(() => setNotice(null), 2400);
+    },
+    onError: (e) => setNotice({ type: "error", message: e.message }),
+  });
+  const settings = (settingsRaw || {}) as Record<string, string>;
+
+  const [foodImage, setFoodImage] = useState<string>(settings.home_card_food_image ?? "");
+  const [marketImage, setMarketImage] = useState<string>(settings.home_card_market_image ?? "");
+  const [uploadingFood, setUploadingFood] = useState(false);
+  const [uploadingMarket, setUploadingMarket] = useState(false);
+  const [notice, setNotice] = useState<{ type: "success" | "error"; message: string } | null>(null);
+
+  useEffect(() => {
+    setFoodImage(settings.home_card_food_image ?? "");
+    setMarketImage(settings.home_card_market_image ?? "");
+  }, [settings.home_card_food_image, settings.home_card_market_image]);
+
+  const handleUpload = async (file: File, target: "food" | "market") => {
+    const setUploading = target === "food" ? setUploadingFood : setUploadingMarket;
+    const setImage = target === "food" ? setFoodImage : setMarketImage;
+    setUploading(true);
+    try {
+      const url = await uploadToR2(file, getToken());
+      setImage(url);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "อัปโหลดไม่สำเร็จ";
+      setNotice({ type: "error", message: msg });
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const save = async () => {
+    await updateSettings.mutateAsync({
+      home_card_food_image: foodImage,
+      home_card_market_image: marketImage,
+    });
+  };
+
+  const Slot = ({
+    title,
+    description,
+    imageUrl,
+    onUpload,
+    onClear,
+    uploading,
+  }: {
+    title: string;
+    description: string;
+    imageUrl: string;
+    onUpload: (file: File) => void;
+    onClear: () => void;
+    uploading: boolean;
+  }) => (
+    <div className="flex-1 min-w-0">
+      <p className="font-semibold text-gray-900">{title}</p>
+      <p className="text-xs text-gray-400 mt-0.5 mb-3">{description}</p>
+      {imageUrl ? (
+        <div className="relative aspect-[3/4] rounded-xl overflow-hidden border border-gray-200 bg-gray-50">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={imageUrl} alt={title} className="absolute inset-0 w-full h-full object-cover" />
+          <button
+            type="button"
+            onClick={onClear}
+            className="absolute top-2 right-2 rounded-full bg-white/95 border border-gray-200 shadow-sm w-7 h-7 flex items-center justify-center text-gray-600 hover:text-red-600"
+            aria-label="ลบรูป"
+          >
+            ×
+          </button>
+        </div>
+      ) : (
+        <label
+          className={`flex flex-col items-center justify-center gap-2 cursor-pointer rounded-xl border-2 border-dashed aspect-[3/4] ${
+            uploading ? "border-orange-300 bg-orange-50 text-orange-400" : "border-gray-300 bg-gray-50 text-gray-600 hover:bg-gray-100"
+          }`}
+        >
+          <input
+            type="file"
+            accept="image/*"
+            className="sr-only"
+            disabled={uploading}
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) onUpload(f);
+              e.target.value = "";
+            }}
+          />
+          <span className="text-3xl">📷</span>
+          <span className="text-sm font-semibold">
+            {uploading ? "กำลังอัปโหลด…" : "อัปโหลดรูป"}
+          </span>
+          <span className="text-xs text-gray-400">PNG / JPG · 3:4</span>
+        </label>
+      )}
+    </div>
+  );
+
+  return (
+    <section className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 mb-6">
+      <div className="mb-5">
+        <h2 className="text-lg font-bold text-gray-900">การ์ดหน้าแรกของลูกค้า</h2>
+        <p className="text-xs text-gray-400 mt-1">
+          การ์ด 2 อันที่ลูกค้าเห็นทันทีเมื่อเปิดแอป — "สั่งอาหาร" และ "ช้อปตลาดนัด"
+        </p>
+      </div>
+
+      {notice && (
+        <div className={`mb-4 rounded-lg px-3 py-2 text-sm ${notice.type === "success" ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}`}>
+          {notice.message}
+        </div>
+      )}
+
+      <div className="flex flex-col md:flex-row gap-4">
+        <Slot
+          title="สั่งอาหาร"
+          description="เปิด flow สั่งอาหารเดลิเวอรีปกติ"
+          imageUrl={foodImage}
+          onUpload={(f) => void handleUpload(f, "food")}
+          onClear={() => setFoodImage("")}
+          uploading={uploadingFood}
+        />
+        <Slot
+          title="ช้อปตลาดนัด"
+          description="โหมดตลาดนัด — เปิดดูร้านในตลาดประจำวัน"
+          imageUrl={marketImage}
+          onUpload={(f) => void handleUpload(f, "market")}
+          onClear={() => setMarketImage("")}
+          uploading={uploadingMarket}
+        />
+      </div>
+
+      <button
+        type="button"
+        onClick={save}
+        disabled={updateSettings.isPending}
+        className="mt-5 inline-flex items-center gap-2 rounded-lg bg-orange-500 text-white px-4 py-2.5 text-sm font-semibold disabled:opacity-60"
+      >
+        {updateSettings.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+        {updateSettings.isPending ? "กำลังบันทึก..." : "บันทึกรูปการ์ด"}
+      </button>
+    </section>
+  );
+}
+
 export default function SettingsPage() {
   return (
     <div>
@@ -1207,6 +1364,7 @@ export default function SettingsPage() {
 
       <SystemOperationsCard />
       <AppAvailabilityCard />
+      <HomeCardsCard />
       <DeliverySettings />
       <PromoSection />
     </div>
