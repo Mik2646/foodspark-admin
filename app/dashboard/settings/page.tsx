@@ -1,6 +1,7 @@
 "use client";
 
-import { trpc } from "@/lib/trpc";
+import { trpc, getToken } from "@/lib/trpc";
+import { uploadToR2 } from "@/lib/upload";
 import { useEffect, useMemo, useState } from "react";
 import {
   AlertCircle,
@@ -973,15 +974,30 @@ function AppAvailabilityCard() {
         return {
           enabled: Boolean(p.enabled),
           message: typeof p.message === "string" ? p.message : "",
+          imageUrl: typeof p.imageUrl === "string" ? p.imageUrl : "",
         };
       }
     } catch { /* fall through */ }
-    return { enabled: false, message: "" };
+    return { enabled: false, message: "", imageUrl: "" };
   }, [settings.maintenance_mode]);
 
   const [hours, setHours] = useState(initialHours);
   const [maintenance, setMaintenance] = useState(initialMaintenance);
   const [notice, setNotice] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
+
+  const handleMaintenanceImageUpload = async (file: File) => {
+    setUploadingImage(true);
+    try {
+      const url = await uploadToR2(file, getToken());
+      setMaintenance((m) => ({ ...m, imageUrl: url }));
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "อัปโหลดไม่สำเร็จ";
+      setNotice({ type: "error", message: `อัปโหลดรูป: ${msg}` });
+    } finally {
+      setUploadingImage(false);
+    }
+  };
 
   // Re-sync local form state when the upstream settings change.
   useEffect(() => { setHours(initialHours); }, [initialHours]);
@@ -1045,6 +1061,57 @@ function AppAvailabilityCard() {
           placeholder="ข้อความที่ลูกค้าเห็น (เช่น 'ระบบกำลังปรับปรุง จะกลับมาให้บริการ 22:00')"
           className="mt-3 w-full rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm"
         />
+
+        {/* Image upload — admin can attach a poster that shows on the
+            customer gate screen instead of (or alongside) the wrench
+            animation. Useful for "Closed for Songkran" banners or
+            partner-branded maintenance windows. */}
+        <div className="mt-3">
+          <p className="text-xs font-medium text-amber-900 mb-2">
+            รูปประกาศ (optional) — แสดงบนหน้า maintenance ของลูกค้า
+          </p>
+          {maintenance.imageUrl ? (
+            <div className="relative rounded-lg overflow-hidden border border-amber-300 bg-white">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={maintenance.imageUrl}
+                alt="รูปประกาศ maintenance"
+                className="w-full h-48 object-contain bg-amber-50"
+              />
+              <button
+                type="button"
+                onClick={() => setMaintenance({ ...maintenance, imageUrl: "" })}
+                className="absolute top-2 right-2 rounded-full bg-white/95 border border-amber-200 shadow-sm w-7 h-7 flex items-center justify-center text-amber-700 hover:text-red-600"
+                aria-label="ลบรูป"
+              >
+                ×
+              </button>
+            </div>
+          ) : (
+            <label
+              className={`flex flex-col items-center justify-center gap-2 cursor-pointer rounded-lg border-2 border-dashed py-6 ${
+                uploadingImage ? "border-amber-300 bg-amber-50 text-amber-400" : "border-amber-300 bg-white text-amber-700 hover:bg-amber-50"
+              }`}
+            >
+              <input
+                type="file"
+                accept="image/*"
+                className="sr-only"
+                disabled={uploadingImage}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) void handleMaintenanceImageUpload(f);
+                  e.target.value = "";
+                }}
+              />
+              <span className="text-2xl">📷</span>
+              <span className="text-sm font-semibold">
+                {uploadingImage ? "กำลังอัปโหลด…" : "แตะเพื่ออัปโหลดรูปประกาศ"}
+              </span>
+              <span className="text-xs text-amber-600">PNG / JPG · ≤ 5MB</span>
+            </label>
+          )}
+        </div>
       </div>
 
       {/* Operating hours */}
