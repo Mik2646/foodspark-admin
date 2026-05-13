@@ -3,7 +3,7 @@ import { use, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { trpc, getToken } from "@/lib/trpc";
-import { ArrowLeft, Store, Star, Clock, Truck, ChevronRight, Package, Pencil, Plus, Trash2, Check, X, ImageIcon, Zap } from "lucide-react";
+import { ArrowLeft, Store, Star, Clock, Truck, ChevronRight, Package, Pencil, Plus, Trash2, Check, X, ImageIcon, Zap, ShoppingBasket } from "lucide-react";
 import ShareRestaurantButton from "@/components/ShareRestaurantButton";
 import OpeningHoursEditor from "@/components/OpeningHoursEditor";
 import MenuItemForm, {
@@ -42,6 +42,14 @@ export default function RestaurantDetailPage({ params }: { params: Promise<{ id:
   const deleteItem = trpc.admin.deleteMenuItem.useMutation({
     onSuccess: () => utils.admin.getRestaurantDetail.invalidate({ id }),
     onError: (e) => alert("ลบไม่สำเร็จ: " + e.message),
+  });
+  // Phase 2 — market assignment. List of markets is admin-only, but it's
+  // cheap (one row per market). The assignment mutation is separate from
+  // updateRestaurant so we don't risk regressing the merchant edit flow.
+  const { data: marketsList = [] } = trpc.admin.listMarkets.useQuery();
+  const setRestaurantMarket = trpc.admin.setRestaurantMarket.useMutation({
+    onSuccess: () => utils.admin.getRestaurantDetail.invalidate({ id }),
+    onError: (e) => alert("อัปเดตตลาดไม่สำเร็จ: " + e.message),
   });
 
   const [editingInfo, setEditingInfo] = useState(false);
@@ -450,6 +458,60 @@ export default function RestaurantDetailPage({ params }: { params: Promise<{ id:
           </div>
         </div>
       )}
+
+      {/* Market assignment — Phase 2 */}
+      <div className="bg-white rounded-2xl border border-emerald-100 shadow-sm p-5 mb-6">
+        <div className="flex items-center gap-2 mb-3">
+          <ShoppingBasket className="w-5 h-5 text-emerald-500" />
+          <h2 className="text-base font-bold text-gray-900">ตลาดนัด</h2>
+          {(r as { isMarketVendor?: boolean | null }).isMarketVendor ? (
+            <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-semibold">
+              พ่อค้าตลาดนัด
+            </span>
+          ) : (
+            <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 font-semibold">
+              ร้านประจำ
+            </span>
+          )}
+        </div>
+        <p className="text-xs text-gray-500 mb-3">
+          กำหนดให้ร้านนี้ขายในตลาดนัด — เมื่อเลือกตลาด ร้านจะปรากฏใน /liff/market ตามวันที่ตลาดเปิด
+        </p>
+        <div className="flex items-center gap-2">
+          <select
+            value={(r as { marketId?: string | null }).marketId ?? ""}
+            onChange={(e) => {
+              const next = e.target.value || null;
+              setRestaurantMarket.mutate({
+                restaurantId: id,
+                marketId: next,
+                isMarketVendor: next != null,
+              });
+            }}
+            disabled={setRestaurantMarket.isPending}
+            className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-300 bg-white"
+          >
+            <option value="">— ไม่อยู่ในตลาดนัด —</option>
+            {marketsList.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.name}
+                {m.village ? ` · ${m.village}` : ""}
+              </option>
+            ))}
+          </select>
+          {marketsList.length === 0 && (
+            <Link
+              href="/dashboard/markets"
+              className="text-xs text-emerald-600 hover:underline whitespace-nowrap"
+            >
+              สร้างตลาดก่อน →
+            </Link>
+          )}
+        </div>
+        {setRestaurantMarket.isPending && (
+          <p className="text-xs text-emerald-500 mt-2">⏳ กำลังบันทึก...</p>
+        )}
+      </div>
 
       {/* Menu Management */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
