@@ -15,6 +15,8 @@ import {
   ShieldCheck,
   Tag,
   Trash2,
+  Wrench,
+  Clock,
 } from "lucide-react";
 
 const TYPE_LABELS: Record<string, string> = {
@@ -1019,7 +1021,9 @@ function AppAvailabilityCard() {
       <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 mb-5">
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1">
-            <p className="font-semibold text-amber-900">🛠️ โหมดปิดปรับปรุง</p>
+            <p className="font-semibold text-amber-900 flex items-center gap-1.5">
+              <Wrench size={16} />โหมดปิดปรับปรุง
+            </p>
             <p className="text-xs text-amber-700 mt-0.5">
               เปิดเมื่อต้องการบล็อกการสั่งอาหารชั่วคราว เช่น ระบบล่ม หรือ deploy
             </p>
@@ -1047,7 +1051,9 @@ function AppAvailabilityCard() {
       <div className="rounded-xl border border-gray-200 p-4">
         <div className="flex items-start justify-between gap-3 mb-3">
           <div className="flex-1">
-            <p className="font-semibold text-gray-900">⏰ เวลาเปิด-ปิดร้าน</p>
+            <p className="font-semibold text-gray-900 flex items-center gap-1.5">
+              <Clock size={16} />เวลาเปิด-ปิดร้าน
+            </p>
             <p className="text-xs text-gray-400 mt-0.5">
               นอกช่วงเวลานี้ลูกค้าจะเห็นหน้า "ระบบยังไม่เปิดบริการ" และสั่งไม่ได้
             </p>
