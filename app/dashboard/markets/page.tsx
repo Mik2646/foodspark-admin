@@ -32,6 +32,7 @@ import {
   Calendar,
   Store,
   ImageIcon,
+  Loader2,
 } from "lucide-react";
 
 type DayIdx = 0 | 1 | 2 | 3 | 4 | 5 | 6;
@@ -409,8 +410,9 @@ export default function MarketsPage() {
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-600 file:mr-3 file:py-1 file:px-3 file:rounded-md file:border-0 file:bg-emerald-50 file:text-emerald-600 file:font-medium bg-white"
                 />
                 {uploading && (
-                  <p className="text-xs text-emerald-500 mt-1">
-                    ⏳ กำลังอัปโหลด...
+                  <p className="text-xs text-emerald-500 mt-1 inline-flex items-center gap-1.5">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    กำลังอัปโหลด...
                   </p>
                 )}
               </div>
