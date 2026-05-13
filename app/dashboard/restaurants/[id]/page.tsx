@@ -3,7 +3,7 @@ import { use, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { trpc, getToken } from "@/lib/trpc";
-import { ArrowLeft, Store, Star, Clock, Truck, ChevronRight, Package, Pencil, Plus, Trash2, Check, X, ImageIcon } from "lucide-react";
+import { ArrowLeft, Store, Star, Clock, Truck, ChevronRight, Package, Pencil, Plus, Trash2, Check, X, ImageIcon, Zap } from "lucide-react";
 import ShareRestaurantButton from "@/components/ShareRestaurantButton";
 import OpeningHoursEditor from "@/components/OpeningHoursEditor";
 import MenuItemForm, {
@@ -325,7 +325,9 @@ export default function RestaurantDetailPage({ params }: { params: Promise<{ id:
                 )}
                 <div className="flex items-center justify-between gap-3 pt-2 border-t border-orange-200">
                   <div>
-                    <p className="text-sm font-semibold text-orange-700">⚡ รับไรเดอร์ระบบด้วย</p>
+                    <p className="text-sm font-semibold text-orange-700 flex items-center gap-1.5">
+                      <Zap size={14} />รับไรเดอร์ระบบด้วย
+                    </p>
                     <p className="text-[11px] text-gray-600">ปิดถ้าจะส่งเองเท่านั้น</p>
                   </div>
                   <input
