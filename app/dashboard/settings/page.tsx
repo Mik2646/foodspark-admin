@@ -1,7 +1,7 @@
 "use client";
 
 import { trpc } from "@/lib/trpc";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   AlertCircle,
   Copy,
@@ -922,6 +922,206 @@ function SystemOperationsCard() {
   );
 }
 
+/**
+ * AppAvailability — controls when the customer-facing app accepts orders.
+ *
+ * Stores two keys in `system_settings`:
+ *   - `app_operating_hours` JSON `{ enabled, openTime, closeTime, days }`
+ *   - `maintenance_mode`    JSON `{ enabled, message }`
+ *
+ * Both are surfaced through `trpc.auth.getAppAvailability` which the LIFF
+ * and native customer apps poll on home-screen mount. When the platform
+ * is closed (outside hours or in maintenance) those apps render a full-
+ * screen gate instead of the menu.
+ */
+function AppAvailabilityCard() {
+  const utils = trpc.useUtils();
+  const { data: settingsRaw } = trpc.admin.getSettings.useQuery();
+  const updateSettings = trpc.admin.updateSettings.useMutation({
+    onSuccess: async () => {
+      await utils.admin.getSettings.invalidate();
+      setNotice({ type: "success", message: "บันทึกแล้ว" });
+      setTimeout(() => setNotice(null), 2400);
+    },
+    onError: (e) => setNotice({ type: "error", message: e.message }),
+  });
+  const settings = (settingsRaw || {}) as Record<string, string>;
+
+  // Operating hours — defaults to "always open" so a fresh install
+  // doesn't accidentally gate customers out.
+  const initialHours = useMemo(() => {
+    try {
+      if (settings.app_operating_hours) {
+        const p = JSON.parse(settings.app_operating_hours);
+        return {
+          enabled: Boolean(p.enabled),
+          openTime: typeof p.openTime === "string" ? p.openTime : "06:00",
+          closeTime: typeof p.closeTime === "string" ? p.closeTime : "22:00",
+          days: Array.isArray(p.days) ? p.days : [0, 1, 2, 3, 4, 5, 6],
+        };
+      }
+    } catch { /* fall through */ }
+    return { enabled: false, openTime: "06:00", closeTime: "22:00", days: [0, 1, 2, 3, 4, 5, 6] };
+  }, [settings.app_operating_hours]);
+
+  const initialMaintenance = useMemo(() => {
+    try {
+      if (settings.maintenance_mode) {
+        const p = JSON.parse(settings.maintenance_mode);
+        return {
+          enabled: Boolean(p.enabled),
+          message: typeof p.message === "string" ? p.message : "",
+        };
+      }
+    } catch { /* fall through */ }
+    return { enabled: false, message: "" };
+  }, [settings.maintenance_mode]);
+
+  const [hours, setHours] = useState(initialHours);
+  const [maintenance, setMaintenance] = useState(initialMaintenance);
+  const [notice, setNotice] = useState<{ type: "success" | "error"; message: string } | null>(null);
+
+  // Re-sync local form state when the upstream settings change.
+  useEffect(() => { setHours(initialHours); }, [initialHours]);
+  useEffect(() => { setMaintenance(initialMaintenance); }, [initialMaintenance]);
+
+  const dayLabels = ["อา.", "จ.", "อ.", "พ.", "พฤ.", "ศ.", "ส."];
+  const toggleDay = (d: number) => {
+    setHours((h) => ({
+      ...h,
+      days: h.days.includes(d) ? h.days.filter((x: number) => x !== d) : [...h.days, d].sort(),
+    }));
+  };
+
+  const save = async () => {
+    await updateSettings.mutateAsync({
+      app_operating_hours: JSON.stringify(hours),
+      maintenance_mode: JSON.stringify(maintenance),
+    });
+  };
+
+  return (
+    <section className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 mb-6">
+      <div className="mb-5">
+        <h2 className="text-lg font-bold text-gray-900">เวลาทำการระบบ + Maintenance Mode</h2>
+        <p className="text-xs text-gray-400 mt-1">
+          ควบคุมเวลาที่ลูกค้าสั่งอาหารผ่านแอปได้ และเปิดโหมดปิดปรับปรุงเมื่อจำเป็น
+        </p>
+      </div>
+
+      {notice && (
+        <div className={`mb-4 rounded-lg px-3 py-2 text-sm ${notice.type === "success" ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}`}>
+          {notice.message}
+        </div>
+      )}
+
+      {/* Maintenance mode — highest priority, overrides hours */}
+      <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 mb-5">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex-1">
+            <p className="font-semibold text-amber-900">🛠️ โหมดปิดปรับปรุง</p>
+            <p className="text-xs text-amber-700 mt-0.5">
+              เปิดเมื่อต้องการบล็อกการสั่งอาหารชั่วคราว เช่น ระบบล่ม หรือ deploy
+            </p>
+          </div>
+          <label className="inline-flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              className="sr-only peer"
+              checked={maintenance.enabled}
+              onChange={(e) => setMaintenance({ ...maintenance, enabled: e.target.checked })}
+            />
+            <div className="relative w-11 h-6 bg-gray-200 rounded-full peer peer-checked:bg-amber-500 transition-colors after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:w-5 after:h-5 after:transition-transform peer-checked:after:translate-x-5" />
+          </label>
+        </div>
+        <input
+          type="text"
+          value={maintenance.message}
+          onChange={(e) => setMaintenance({ ...maintenance, message: e.target.value })}
+          placeholder="ข้อความที่ลูกค้าเห็น (เช่น 'ระบบกำลังปรับปรุง จะกลับมาให้บริการ 22:00')"
+          className="mt-3 w-full rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm"
+        />
+      </div>
+
+      {/* Operating hours */}
+      <div className="rounded-xl border border-gray-200 p-4">
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <div className="flex-1">
+            <p className="font-semibold text-gray-900">⏰ เวลาเปิด-ปิดร้าน</p>
+            <p className="text-xs text-gray-400 mt-0.5">
+              นอกช่วงเวลานี้ลูกค้าจะเห็นหน้า "ระบบยังไม่เปิดบริการ" และสั่งไม่ได้
+            </p>
+          </div>
+          <label className="inline-flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              className="sr-only peer"
+              checked={hours.enabled}
+              onChange={(e) => setHours({ ...hours, enabled: e.target.checked })}
+            />
+            <div className="relative w-11 h-6 bg-gray-200 rounded-full peer peer-checked:bg-orange-500 transition-colors after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:w-5 after:h-5 after:transition-transform peer-checked:after:translate-x-5" />
+          </label>
+        </div>
+
+        <div className={hours.enabled ? "" : "opacity-50 pointer-events-none"}>
+          <div className="grid grid-cols-2 gap-3 mb-4">
+            <div>
+              <label className="text-xs font-medium text-gray-600">เปิดบริการตอน</label>
+              <input
+                type="time"
+                value={hours.openTime}
+                onChange={(e) => setHours({ ...hours, openTime: e.target.value })}
+                className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-600">ปิดบริการตอน</label>
+              <input
+                type="time"
+                value={hours.closeTime}
+                onChange={(e) => setHours({ ...hours, closeTime: e.target.value })}
+                className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="text-xs font-medium text-gray-600 mb-2 block">วันที่เปิดบริการ</label>
+            <div className="flex gap-1.5 flex-wrap">
+              {dayLabels.map((label, idx) => {
+                const active = hours.days.includes(idx);
+                return (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => toggleDay(idx)}
+                    className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition ${
+                      active
+                        ? "bg-orange-500 border-orange-500 text-white"
+                        : "bg-white border-gray-200 text-gray-500"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <button
+        type="button"
+        onClick={save}
+        disabled={updateSettings.isPending}
+        className="mt-5 inline-flex items-center gap-2 rounded-lg bg-orange-500 text-white px-4 py-2.5 text-sm font-semibold disabled:opacity-60"
+      >
+        {updateSettings.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+        {updateSettings.isPending ? "กำลังบันทึก..." : "บันทึกค่าทั้ง 2"}
+      </button>
+    </section>
+  );
+}
+
 export default function SettingsPage() {
   return (
     <div>
@@ -933,6 +1133,7 @@ export default function SettingsPage() {
       </div>
 
       <SystemOperationsCard />
+      <AppAvailabilityCard />
       <DeliverySettings />
       <PromoSection />
     </div>
