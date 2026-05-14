@@ -1290,7 +1290,7 @@ function HomeCardsCard() {
       <p className="font-semibold text-gray-900">{title}</p>
       <p className="text-xs text-gray-400 mt-0.5 mb-3">{description}</p>
       {imageUrl ? (
-        <div className="relative aspect-[3/4] rounded-xl overflow-hidden border border-gray-200 bg-gray-50">
+        <div className="relative aspect-square rounded-xl overflow-hidden border border-gray-200 bg-gray-50">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={imageUrl} alt={title} className="absolute inset-0 w-full h-full object-cover" />
           <button
@@ -1304,7 +1304,7 @@ function HomeCardsCard() {
         </div>
       ) : (
         <label
-          className={`flex flex-col items-center justify-center gap-2 cursor-pointer rounded-xl border-2 border-dashed aspect-[3/4] ${
+          className={`flex flex-col items-center justify-center gap-2 cursor-pointer rounded-xl border-2 border-dashed aspect-square ${
             uploading ? "border-orange-300 bg-orange-50 text-orange-400" : "border-gray-300 bg-gray-50 text-gray-600 hover:bg-gray-100"
           }`}
         >
@@ -1323,7 +1323,7 @@ function HomeCardsCard() {
           <span className="text-sm font-semibold">
             {uploading ? "กำลังอัปโหลด…" : "อัปโหลดรูป"}
           </span>
-          <span className="text-xs text-gray-400">PNG / JPG · 3:4</span>
+          <span className="text-xs text-gray-400">PNG / JPG · สี่เหลี่ยมจัตุรัส 1:1</span>
         </label>
       )}
     </div>
