@@ -43,26 +43,14 @@ export default function RestaurantDetailPage({ params }: { params: Promise<{ id:
     onSuccess: () => utils.admin.getRestaurantDetail.invalidate({ id }),
     onError: (e) => alert("ลบไม่สำเร็จ: " + e.message),
   });
-  // Phase 2 — market assignment. List of markets is admin-only, but it's
-  // cheap (one row per market). The assignment mutation is separate from
-  // updateRestaurant so we don't risk regressing the merchant edit flow.
+  // Phase 5 — unified restaurant type. Replaces the previous 3
+  // independent panels (market / preorder / pickup) with a single
+  // atomic mutation. Type is mutually exclusive: regular / market /
+  // preorder. Pickup is independent (any type can also accept walk-in).
   const { data: marketsList = [] } = trpc.admin.listMarkets.useQuery();
-  const setRestaurantMarket = trpc.admin.setRestaurantMarket.useMutation({
+  const setRestaurantType = trpc.admin.setRestaurantType.useMutation({
     onSuccess: () => utils.admin.getRestaurantDetail.invalidate({ id }),
-    onError: (e) => alert("อัปเดตตลาดไม่สำเร็จ: " + e.message),
-  });
-  // Phase 3 — preorder lane configuration. Separate mutation from
-  // updateRestaurant so the toggle / time fields don't risk pulling
-  // unrelated fields along for the ride.
-  const setRestaurantPreorder = trpc.admin.setRestaurantPreorder.useMutation({
-    onSuccess: () => utils.admin.getRestaurantDetail.invalidate({ id }),
-    onError: (e) => alert("ตั้งค่าพรีออเดอร์ไม่สำเร็จ: " + e.message),
-  });
-  // Phase 4 — pickup ("รับที่ร้าน") configuration. Separate mutation
-  // so the toggle / ready-minutes don't touch unrelated fields.
-  const setRestaurantPickup = trpc.admin.setRestaurantPickup.useMutation({
-    onSuccess: () => utils.admin.getRestaurantDetail.invalidate({ id }),
-    onError: (e) => alert("ตั้งค่ารับที่ร้านไม่สำเร็จ: " + e.message),
+    onError: (e) => alert("ตั้งค่าประเภทร้านไม่สำเร็จ: " + e.message),
   });
 
   const [editingInfo, setEditingInfo] = useState(false);
@@ -472,76 +460,17 @@ export default function RestaurantDetailPage({ params }: { params: Promise<{ id:
         </div>
       )}
 
-      {/* Market assignment — Phase 2 */}
-      <div className="bg-white rounded-2xl border border-emerald-100 shadow-sm p-5 mb-6">
-        <div className="flex items-center gap-2 mb-3">
-          <ShoppingBasket className="w-5 h-5 text-emerald-500" />
-          <h2 className="text-base font-bold text-gray-900">ตลาดนัด</h2>
-          {(r as { isMarketVendor?: boolean | null }).isMarketVendor ? (
-            <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-semibold">
-              พ่อค้าตลาดนัด
-            </span>
-          ) : (
-            <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 font-semibold">
-              ร้านประจำ
-            </span>
-          )}
-        </div>
-        <p className="text-xs text-gray-500 mb-3">
-          กำหนดให้ร้านนี้ขายในตลาดนัด — เมื่อเลือกตลาด ร้านจะปรากฏใน /liff/market ตามวันที่ตลาดเปิด
-        </p>
-        <div className="flex items-center gap-2">
-          <select
-            value={(r as { marketId?: string | null }).marketId ?? ""}
-            onChange={(e) => {
-              const next = e.target.value || null;
-              setRestaurantMarket.mutate({
-                restaurantId: id,
-                marketId: next,
-                isMarketVendor: next != null,
-              });
-            }}
-            disabled={setRestaurantMarket.isPending}
-            className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-300 bg-white"
-          >
-            <option value="">— ไม่อยู่ในตลาดนัด —</option>
-            {marketsList.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.name}
-                {m.village ? ` · ${m.village}` : ""}
-              </option>
-            ))}
-          </select>
-          {marketsList.length === 0 && (
-            <Link
-              href="/dashboard/markets"
-              className="text-xs text-emerald-600 hover:underline whitespace-nowrap"
-            >
-              สร้างตลาดก่อน →
-            </Link>
-          )}
-        </div>
-        {setRestaurantMarket.isPending && (
-          <p className="text-xs text-emerald-500 mt-2">⏳ กำลังบันทึก...</p>
-        )}
-      </div>
-
-      {/* Preorder lane — Phase 3 */}
-      <PreorderPanel
+      {/* Phase 5 — Unified restaurant type picker.
+          Replaces the previous 3 separate panels (market / preorder /
+          pickup) with a single radio group + pickup checkbox so an
+          admin can't accidentally put a shop in two buckets at once. */}
+      <RestaurantTypePanel
         restaurant={r}
+        markets={marketsList}
         onSave={(payload) =>
-          setRestaurantPreorder.mutate({ restaurantId: id, ...payload })
+          setRestaurantType.mutate({ restaurantId: id, ...payload })
         }
-        saving={setRestaurantPreorder.isPending}
-      />
-
-      {/* Pickup — Phase 4 */}
-      <PickupPanel
-        restaurant={r}
-        onSave={(payload) =>
-          setRestaurantPickup.mutate({ restaurantId: id, ...payload })
-        }
-        saving={setRestaurantPickup.isPending}
+        saving={setRestaurantType.isPending}
       />
 
       {/* Menu Management */}
@@ -666,253 +595,326 @@ export default function RestaurantDetailPage({ params }: { params: Promise<{ id:
 }
 
 /**
- * PreorderPanel — Phase 3 admin UI for the per-restaurant preorder
- * lane. Toggle flips `acceptsPreorder`; when on, the time fields
- * become editable. Saved via admin.setRestaurantPreorder so the
- * regular updateRestaurant path stays simple.
+ * RestaurantTypePanel — Phase 5 unified picker.
+ *
+ * Replaces the prior 3 separate panels (market / preorder / pickup)
+ * with one radio group + pickup checkbox. Type is mutually exclusive
+ * so a shop can't accidentally appear in both "ตลาดนัด" and
+ * "พรีออเดอร์" lists at the same time. Pickup is independent because
+ * walking to the shop works regardless of the primary mode.
+ *
+ * Submits to admin.setRestaurantType which atomically reconciles
+ * marketId / isMarketVendor / acceptsPreorder / preorder* fields so
+ * stale data from a previous bucket gets cleared on switch.
  */
-function PreorderPanel({
+function RestaurantTypePanel({
   restaurant,
+  markets,
   onSave,
   saving,
 }: {
   restaurant: Record<string, unknown>;
+  markets: Array<{ id: string; name: string; village?: string | null }>;
   onSave: (payload: {
-    acceptsPreorder: boolean;
+    type: "regular" | "market" | "preorder";
+    marketId?: string | null;
     preorderCutoffTime?: string | null;
     preorderDeliveryStart?: string | null;
     preorderDeliveryEnd?: string | null;
     preorderLeadDays?: number;
+    pickupEnabled: boolean;
+    pickupReadyMinutes?: number | null;
   }) => void;
   saving: boolean;
 }) {
   const r = restaurant as {
+    marketId?: string | null;
+    isMarketVendor?: boolean | null;
     acceptsPreorder?: boolean | null;
     preorderCutoffTime?: string | null;
     preorderDeliveryStart?: string | null;
     preorderDeliveryEnd?: string | null;
     preorderLeadDays?: number | null;
+    acceptsPickup?: boolean | null;
+    pickupReadyMinutes?: number | null;
   };
-  const [enabled, setEnabled] = useState<boolean>(Boolean(r.acceptsPreorder));
-  const [cutoff, setCutoff] = useState<string>(r.preorderCutoffTime ?? "20:00");
-  const [start, setStart] = useState<string>(r.preorderDeliveryStart ?? "16:00");
-  const [end, setEnd] = useState<string>(r.preorderDeliveryEnd ?? "19:00");
-  const [leadDays, setLeadDays] = useState<number>(r.preorderLeadDays ?? 1);
 
-  // Sync state when the server pushes new data (e.g. after save).
+  // Derive the current type from the row's flags.
+  const initialType: "regular" | "market" | "preorder" = r.acceptsPreorder
+    ? "preorder"
+    : r.marketId
+      ? "market"
+      : "regular";
+
+  const [type, setType] = useState<"regular" | "market" | "preorder">(initialType);
+  const [marketId, setMarketId] = useState<string>(r.marketId ?? "");
+  const [cutoff, setCutoff] = useState<string>(r.preorderCutoffTime ?? "20:00");
+  const [delStart, setDelStart] = useState<string>(r.preorderDeliveryStart ?? "16:00");
+  const [delEnd, setDelEnd] = useState<string>(r.preorderDeliveryEnd ?? "19:00");
+  const [leadDays, setLeadDays] = useState<number>(r.preorderLeadDays ?? 1);
+  const [pickupEnabled, setPickupEnabled] = useState<boolean>(Boolean(r.acceptsPickup));
+  const [pickupMin, setPickupMin] = useState<number>(r.pickupReadyMinutes ?? 20);
+
+  // Re-sync when the server pushes new data (after save).
   useEffect(() => {
-    setEnabled(Boolean(r.acceptsPreorder));
+    setType(
+      r.acceptsPreorder ? "preorder" : r.marketId ? "market" : "regular",
+    );
+    setMarketId(r.marketId ?? "");
     if (r.preorderCutoffTime) setCutoff(r.preorderCutoffTime);
-    if (r.preorderDeliveryStart) setStart(r.preorderDeliveryStart);
-    if (r.preorderDeliveryEnd) setEnd(r.preorderDeliveryEnd);
+    if (r.preorderDeliveryStart) setDelStart(r.preorderDeliveryStart);
+    if (r.preorderDeliveryEnd) setDelEnd(r.preorderDeliveryEnd);
     if (r.preorderLeadDays) setLeadDays(r.preorderLeadDays);
+    setPickupEnabled(Boolean(r.acceptsPickup));
+    if (r.pickupReadyMinutes) setPickupMin(r.pickupReadyMinutes);
   }, [
     r.acceptsPreorder,
+    r.marketId,
     r.preorderCutoffTime,
     r.preorderDeliveryStart,
     r.preorderDeliveryEnd,
     r.preorderLeadDays,
+    r.acceptsPickup,
+    r.pickupReadyMinutes,
   ]);
 
-  const handleSave = () => {
-    onSave({
-      acceptsPreorder: enabled,
-      preorderCutoffTime: enabled ? cutoff : null,
-      preorderDeliveryStart: enabled ? start : null,
-      preorderDeliveryEnd: enabled ? end : null,
-      preorderLeadDays: enabled ? leadDays : 1,
-    });
-  };
-
-  return (
-    <div className="bg-white rounded-2xl border border-amber-100 shadow-sm p-5 mb-6">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <CalendarClock className="w-5 h-5 text-amber-500" />
-          <h2 className="text-base font-bold text-gray-900">พรีออเดอร์</h2>
-          {enabled ? (
-            <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-semibold">
-              เปิดรับ
-            </span>
-          ) : (
-            <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 font-semibold">
-              ปิด
-            </span>
-          )}
-        </div>
-        <label className="inline-flex items-center cursor-pointer">
-          <input
-            type="checkbox"
-            checked={enabled}
-            onChange={(e) => setEnabled(e.target.checked)}
-            className="sr-only peer"
-          />
-          <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-amber-300 rounded-full peer peer-checked:bg-amber-500 transition-colors relative after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-5" />
-        </label>
-      </div>
-      <p className="text-xs text-gray-500 mb-4 leading-relaxed">
-        เปิดให้ลูกค้าสั่งล่วงหน้า — ร้านนอกรัศมีปกติจะปรากฏในหน้า "พรีออเดอร์"
-        ของลูกค้า ออเดอร์รวมเป็นรอบส่งวันละครั้งตามเวลาที่กำหนด
-      </p>
-      {enabled && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">
-              ตัดออเดอร์
-            </label>
-            <input
-              type="time"
-              value={cutoff}
-              onChange={(e) => setCutoff(e.target.value)}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300"
-            />
-            <p className="text-[10px] text-gray-400 mt-1">
-              สั่งหลังเวลานี้ → คิวรอบถัดไป
-            </p>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">
-              ส่งตั้งแต่
-            </label>
-            <input
-              type="time"
-              value={start}
-              onChange={(e) => setStart(e.target.value)}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">
-              ส่งถึง
-            </label>
-            <input
-              type="time"
-              value={end}
-              onChange={(e) => setEnd(e.target.value)}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">
-              ส่งล่วงหน้า (วัน)
-            </label>
-            <input
-              type="number"
-              min={1}
-              max={7}
-              value={leadDays}
-              onChange={(e) => setLeadDays(Math.max(1, Math.min(7, Number(e.target.value) || 1)))}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300"
-            />
-            <p className="text-[10px] text-gray-400 mt-1">1 = พรุ่งนี้</p>
-          </div>
-        </div>
-      )}
-      <div className="flex justify-end mt-4">
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold rounded-lg disabled:opacity-50"
-        >
-          {saving ? "กำลังบันทึก..." : "บันทึก"}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-/**
- * PickupPanel — Phase 4 admin UI for the "รับที่ร้าน" mode. Toggle
- * flips acceptsPickup; when on, an ETA minutes field becomes editable.
- */
-function PickupPanel({
-  restaurant,
-  onSave,
-  saving,
-}: {
-  restaurant: Record<string, unknown>;
-  onSave: (payload: {
-    acceptsPickup: boolean;
-    pickupReadyMinutes?: number | null;
-  }) => void;
-  saving: boolean;
-}) {
-  const r = restaurant as {
-    acceptsPickup?: boolean | null;
-    pickupReadyMinutes?: number | null;
-  };
-  const [enabled, setEnabled] = useState<boolean>(Boolean(r.acceptsPickup));
-  const [readyMin, setReadyMin] = useState<number>(r.pickupReadyMinutes ?? 20);
-
-  useEffect(() => {
-    setEnabled(Boolean(r.acceptsPickup));
-    if (r.pickupReadyMinutes) setReadyMin(r.pickupReadyMinutes);
-  }, [r.acceptsPickup, r.pickupReadyMinutes]);
+  const canSave = type !== "market" || Boolean(marketId);
 
   const handleSave = () => {
     onSave({
-      acceptsPickup: enabled,
-      pickupReadyMinutes: enabled ? readyMin : null,
+      type,
+      marketId: type === "market" ? marketId : null,
+      preorderCutoffTime: type === "preorder" ? cutoff : null,
+      preorderDeliveryStart: type === "preorder" ? delStart : null,
+      preorderDeliveryEnd: type === "preorder" ? delEnd : null,
+      preorderLeadDays: type === "preorder" ? leadDays : 1,
+      pickupEnabled,
+      pickupReadyMinutes: pickupEnabled ? pickupMin : null,
     });
   };
 
+  const TYPES = [
+    {
+      key: "regular" as const,
+      label: "ร้านปกติ",
+      sub: "เดลิเวอรีในรัศมีตามปกติ",
+      icon: <Store className="w-5 h-5 text-orange-500" />,
+      accent: "orange",
+    },
+    {
+      key: "market" as const,
+      label: "ร้านตลาดนัด",
+      sub: "ขายในตลาดนัดประจำสัปดาห์",
+      icon: <ShoppingBasket className="w-5 h-5 text-emerald-500" />,
+      accent: "emerald",
+    },
+    {
+      key: "preorder" as const,
+      label: "ร้านพรีออเดอร์",
+      sub: "สั่งวันนี้ส่งพรุ่งนี้ — รวมรอบส่งวันละครั้ง",
+      icon: <CalendarClock className="w-5 h-5 text-amber-500" />,
+      accent: "amber",
+    },
+  ];
+
   return (
-    <div className="bg-white rounded-2xl border border-emerald-100 shadow-sm p-5 mb-6">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <Footprints className="w-5 h-5 text-emerald-500" />
-          <h2 className="text-base font-bold text-gray-900">รับที่ร้าน</h2>
-          {enabled ? (
-            <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-semibold">
-              เปิดรับ
-            </span>
-          ) : (
-            <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 font-semibold">
-              ปิด
-            </span>
-          )}
-        </div>
-        <label className="inline-flex items-center cursor-pointer">
-          <input
-            type="checkbox"
-            checked={enabled}
-            onChange={(e) => setEnabled(e.target.checked)}
-            className="sr-only peer"
-          />
-          <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-emerald-300 rounded-full peer peer-checked:bg-emerald-500 transition-colors relative after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-5" />
-        </label>
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 mb-6">
+      <div className="flex items-center gap-2 mb-4">
+        <h2 className="text-base font-bold text-gray-900">ประเภทร้าน</h2>
+        <span className="text-xs text-gray-400">เลือก 1 ประเภท</span>
       </div>
-      <p className="text-xs text-gray-500 mb-4 leading-relaxed">
-        เปิดให้ลูกค้ามารับที่ร้านเอง — ฟรีค่าส่ง ลูกค้าได้โค้ด 6 หลัก
-        แสดงให้แม่ค้าตรวจตอนรับของ
-      </p>
-      {enabled && (
-        <div className="grid grid-cols-2 gap-3 max-w-md">
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">
-              เวลาทำเฉลี่ย (นาที)
-            </label>
-            <input
-              type="number"
-              min={5}
-              max={120}
-              value={readyMin}
-              onChange={(e) => setReadyMin(Math.max(5, Math.min(120, Number(e.target.value) || 20)))}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-300"
-            />
-            <p className="text-[10px] text-gray-400 mt-1">
-              ลูกค้าเห็น "พร้อมรับใน ~{readyMin} นาที"
-            </p>
+
+      {/* Radio cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+        {TYPES.map((opt) => {
+          const selected = type === opt.key;
+          return (
+            <button
+              key={opt.key}
+              type="button"
+              onClick={() => setType(opt.key)}
+              className={`text-left rounded-xl border-2 px-3 py-3 transition ${
+                selected
+                  ? opt.accent === "orange"
+                    ? "border-orange-400 bg-orange-50"
+                    : opt.accent === "emerald"
+                      ? "border-emerald-400 bg-emerald-50"
+                      : "border-amber-400 bg-amber-50"
+                  : "border-gray-200 bg-white hover:bg-gray-50"
+              }`}
+            >
+              <div className="flex items-start gap-2">
+                <div className="mt-0.5">{opt.icon}</div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-bold text-gray-900">{opt.label}</p>
+                  <p className="text-[11px] text-gray-500 mt-0.5 leading-tight">
+                    {opt.sub}
+                  </p>
+                </div>
+                <div
+                  className={`mt-0.5 w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                    selected
+                      ? opt.accent === "orange"
+                        ? "border-orange-500"
+                        : opt.accent === "emerald"
+                          ? "border-emerald-500"
+                          : "border-amber-500"
+                      : "border-gray-300"
+                  }`}
+                >
+                  {selected && (
+                    <div
+                      className={`w-2 h-2 rounded-full ${
+                        opt.accent === "orange"
+                          ? "bg-orange-500"
+                          : opt.accent === "emerald"
+                            ? "bg-emerald-500"
+                            : "bg-amber-500"
+                      }`}
+                    />
+                  )}
+                </div>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Conditional fields per type */}
+      {type === "market" && (
+        <div className="rounded-xl bg-emerald-50/50 border border-emerald-100 p-3 mb-4">
+          <label className="block text-xs font-semibold text-emerald-800 mb-1">
+            เลือกตลาดที่ร้านอยู่ *
+          </label>
+          <div className="flex items-center gap-2">
+            <select
+              value={marketId}
+              onChange={(e) => setMarketId(e.target.value)}
+              className="flex-1 border border-emerald-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-300 bg-white"
+            >
+              <option value="">— เลือกตลาด —</option>
+              {markets.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name}
+                  {m.village ? ` · ${m.village}` : ""}
+                </option>
+              ))}
+            </select>
+            {markets.length === 0 && (
+              <Link
+                href="/dashboard/markets"
+                className="text-xs text-emerald-700 hover:underline whitespace-nowrap"
+              >
+                สร้างตลาดก่อน →
+              </Link>
+            )}
           </div>
         </div>
       )}
+
+      {type === "preorder" && (
+        <div className="rounded-xl bg-amber-50/50 border border-amber-100 p-3 mb-4 space-y-3">
+          <p className="text-xs text-amber-800 leading-relaxed">
+            ลูกค้าสั่งวันนี้ ระบบรวมรอบส่งวันละครั้งตามเวลาที่กำหนด
+          </p>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div>
+              <label className="block text-[10px] font-semibold text-amber-800 mb-1">
+                ตัดออเดอร์
+              </label>
+              <input
+                type="time"
+                value={cutoff}
+                onChange={(e) => setCutoff(e.target.value)}
+                className="w-full border border-amber-200 rounded-lg px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-300"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-semibold text-amber-800 mb-1">
+                ส่งตั้งแต่
+              </label>
+              <input
+                type="time"
+                value={delStart}
+                onChange={(e) => setDelStart(e.target.value)}
+                className="w-full border border-amber-200 rounded-lg px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-300"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-semibold text-amber-800 mb-1">
+                ส่งถึง
+              </label>
+              <input
+                type="time"
+                value={delEnd}
+                onChange={(e) => setDelEnd(e.target.value)}
+                className="w-full border border-amber-200 rounded-lg px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-300"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-semibold text-amber-800 mb-1">
+                ล่วงหน้า (วัน)
+              </label>
+              <input
+                type="number"
+                min={1}
+                max={7}
+                value={leadDays}
+                onChange={(e) =>
+                  setLeadDays(Math.max(1, Math.min(7, Number(e.target.value) || 1)))
+                }
+                className="w-full border border-amber-200 rounded-lg px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-300"
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Pickup — independent of type. Stacks on top so any shop can
+          accept walk-in pickups regardless of its primary mode. */}
+      <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 flex items-start gap-3">
+        <label className="inline-flex items-center cursor-pointer mt-0.5">
+          <input
+            type="checkbox"
+            checked={pickupEnabled}
+            onChange={(e) => setPickupEnabled(e.target.checked)}
+            className="sr-only peer"
+          />
+          <div className="w-11 h-6 bg-gray-300 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-emerald-300 rounded-full peer peer-checked:bg-emerald-500 transition-colors relative after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-5" />
+        </label>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-bold text-gray-900">รับที่ร้านด้วย</p>
+          <p className="text-[11px] text-gray-500 leading-tight">
+            ลูกค้ามารับเองที่ร้าน — ฟรีค่าส่ง ได้โค้ด 6 หลักให้โชว์ตอนรับ
+          </p>
+          {pickupEnabled && (
+            <div className="mt-2 flex items-center gap-2">
+              <label className="text-[11px] text-gray-600">เวลาทำเฉลี่ย:</label>
+              <input
+                type="number"
+                min={5}
+                max={120}
+                value={pickupMin}
+                onChange={(e) =>
+                  setPickupMin(
+                    Math.max(5, Math.min(120, Number(e.target.value) || 20)),
+                  )
+                }
+                className="w-20 border border-gray-200 rounded-md px-2 py-1 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-emerald-300"
+              />
+              <span className="text-[11px] text-gray-500">นาที</span>
+            </div>
+          )}
+        </div>
+      </div>
+
       <div className="flex justify-end mt-4">
         <button
           onClick={handleSave}
-          disabled={saving}
-          className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold rounded-lg disabled:opacity-50"
+          disabled={saving || !canSave}
+          className="px-5 py-2 bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold rounded-lg disabled:opacity-50"
         >
-          {saving ? "กำลังบันทึก..." : "บันทึก"}
+          {saving ? "กำลังบันทึก..." : "บันทึกประเภทร้าน"}
         </button>
       </div>
     </div>
