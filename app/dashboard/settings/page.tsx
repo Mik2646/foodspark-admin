@@ -18,6 +18,7 @@ import {
   Trash2,
   Wrench,
   Clock,
+  ImageIcon,
 } from "lucide-react";
 
 const TYPE_LABELS: Record<string, string> = {
@@ -1216,18 +1217,40 @@ function HomeCardsCard() {
 
   const [foodImage, setFoodImage] = useState<string>(settings.home_card_food_image ?? "");
   const [marketImage, setMarketImage] = useState<string>(settings.home_card_market_image ?? "");
+  const [preorderImage, setPreorderImage] = useState<string>(
+    settings.home_card_preorder_image ?? "",
+  );
   const [uploadingFood, setUploadingFood] = useState(false);
   const [uploadingMarket, setUploadingMarket] = useState(false);
+  const [uploadingPreorder, setUploadingPreorder] = useState(false);
   const [notice, setNotice] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
   useEffect(() => {
     setFoodImage(settings.home_card_food_image ?? "");
     setMarketImage(settings.home_card_market_image ?? "");
-  }, [settings.home_card_food_image, settings.home_card_market_image]);
+    setPreorderImage(settings.home_card_preorder_image ?? "");
+  }, [
+    settings.home_card_food_image,
+    settings.home_card_market_image,
+    settings.home_card_preorder_image,
+  ]);
 
-  const handleUpload = async (file: File, target: "food" | "market") => {
-    const setUploading = target === "food" ? setUploadingFood : setUploadingMarket;
-    const setImage = target === "food" ? setFoodImage : setMarketImage;
+  const handleUpload = async (
+    file: File,
+    target: "food" | "market" | "preorder",
+  ) => {
+    const setUploading =
+      target === "food"
+        ? setUploadingFood
+        : target === "market"
+          ? setUploadingMarket
+          : setUploadingPreorder;
+    const setImage =
+      target === "food"
+        ? setFoodImage
+        : target === "market"
+          ? setMarketImage
+          : setPreorderImage;
     setUploading(true);
     try {
       const url = await uploadToR2(file, getToken());
@@ -1244,6 +1267,7 @@ function HomeCardsCard() {
     await updateSettings.mutateAsync({
       home_card_food_image: foodImage,
       home_card_market_image: marketImage,
+      home_card_preorder_image: preorderImage,
     });
   };
 
@@ -1295,7 +1319,7 @@ function HomeCardsCard() {
               e.target.value = "";
             }}
           />
-          <span className="text-3xl">📷</span>
+          <ImageIcon className="w-8 h-8" />
           <span className="text-sm font-semibold">
             {uploading ? "กำลังอัปโหลด…" : "อัปโหลดรูป"}
           </span>
@@ -1310,7 +1334,7 @@ function HomeCardsCard() {
       <div className="mb-5">
         <h2 className="text-lg font-bold text-gray-900">การ์ดหน้าแรกของลูกค้า</h2>
         <p className="text-xs text-gray-400 mt-1">
-          การ์ด 2 อันที่ลูกค้าเห็นทันทีเมื่อเปิดแอป — "สั่งอาหาร" และ "ช้อปตลาดนัด"
+          การ์ด 3 อันที่ลูกค้าเห็นทันทีเมื่อเปิดแอป — "สั่งอาหาร" "ช้อปตลาดนัด" และ "พรีออเดอร์"
         </p>
       </div>
 
@@ -1323,7 +1347,7 @@ function HomeCardsCard() {
       <div className="flex flex-col md:flex-row gap-4">
         <Slot
           title="สั่งอาหาร"
-          description="เปิด flow สั่งอาหารเดลิเวอรีปกติ"
+          description="การ์ดทรงสูง คอลัมน์ซ้าย — เดลิเวอรีปกติ"
           imageUrl={foodImage}
           onUpload={(f) => void handleUpload(f, "food")}
           onClear={() => setFoodImage("")}
@@ -1331,11 +1355,19 @@ function HomeCardsCard() {
         />
         <Slot
           title="ช้อปตลาดนัด"
-          description="โหมดตลาดนัด — เปิดดูร้านในตลาดประจำวัน"
+          description="ครึ่งบนคอลัมน์ขวา — ร้านในตลาดนัด"
           imageUrl={marketImage}
           onUpload={(f) => void handleUpload(f, "market")}
           onClear={() => setMarketImage("")}
           uploading={uploadingMarket}
+        />
+        <Slot
+          title="พรีออเดอร์"
+          description="ครึ่งล่างคอลัมน์ขวา — สั่งวันนี้ส่งพรุ่งนี้"
+          imageUrl={preorderImage}
+          onUpload={(f) => void handleUpload(f, "preorder")}
+          onClear={() => setPreorderImage("")}
+          uploading={uploadingPreorder}
         />
       </div>
 
