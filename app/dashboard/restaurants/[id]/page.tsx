@@ -1,9 +1,9 @@
 "use client";
-import { use, useState } from "react";
+import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { trpc, getToken } from "@/lib/trpc";
-import { ArrowLeft, Store, Star, Clock, Truck, ChevronRight, Package, Pencil, Plus, Trash2, Check, X, ImageIcon, Zap, ShoppingBasket } from "lucide-react";
+import { ArrowLeft, Store, Star, Clock, Truck, ChevronRight, Package, Pencil, Plus, Trash2, Check, X, ImageIcon, Zap, ShoppingBasket, CalendarClock } from "lucide-react";
 import ShareRestaurantButton from "@/components/ShareRestaurantButton";
 import OpeningHoursEditor from "@/components/OpeningHoursEditor";
 import MenuItemForm, {
@@ -50,6 +50,13 @@ export default function RestaurantDetailPage({ params }: { params: Promise<{ id:
   const setRestaurantMarket = trpc.admin.setRestaurantMarket.useMutation({
     onSuccess: () => utils.admin.getRestaurantDetail.invalidate({ id }),
     onError: (e) => alert("อัปเดตตลาดไม่สำเร็จ: " + e.message),
+  });
+  // Phase 3 — preorder lane configuration. Separate mutation from
+  // updateRestaurant so the toggle / time fields don't risk pulling
+  // unrelated fields along for the ride.
+  const setRestaurantPreorder = trpc.admin.setRestaurantPreorder.useMutation({
+    onSuccess: () => utils.admin.getRestaurantDetail.invalidate({ id }),
+    onError: (e) => alert("ตั้งค่าพรีออเดอร์ไม่สำเร็จ: " + e.message),
   });
 
   const [editingInfo, setEditingInfo] = useState(false);
@@ -513,6 +520,15 @@ export default function RestaurantDetailPage({ params }: { params: Promise<{ id:
         )}
       </div>
 
+      {/* Preorder lane — Phase 3 */}
+      <PreorderPanel
+        restaurant={r}
+        onSave={(payload) =>
+          setRestaurantPreorder.mutate({ restaurantId: id, ...payload })
+        }
+        saving={setRestaurantPreorder.isPending}
+      />
+
       {/* Menu Management */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
@@ -629,6 +645,162 @@ export default function RestaurantDetailPage({ params }: { params: Promise<{ id:
             ))}
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * PreorderPanel — Phase 3 admin UI for the per-restaurant preorder
+ * lane. Toggle flips `acceptsPreorder`; when on, the time fields
+ * become editable. Saved via admin.setRestaurantPreorder so the
+ * regular updateRestaurant path stays simple.
+ */
+function PreorderPanel({
+  restaurant,
+  onSave,
+  saving,
+}: {
+  restaurant: Record<string, unknown>;
+  onSave: (payload: {
+    acceptsPreorder: boolean;
+    preorderCutoffTime?: string | null;
+    preorderDeliveryStart?: string | null;
+    preorderDeliveryEnd?: string | null;
+    preorderLeadDays?: number;
+  }) => void;
+  saving: boolean;
+}) {
+  const r = restaurant as {
+    acceptsPreorder?: boolean | null;
+    preorderCutoffTime?: string | null;
+    preorderDeliveryStart?: string | null;
+    preorderDeliveryEnd?: string | null;
+    preorderLeadDays?: number | null;
+  };
+  const [enabled, setEnabled] = useState<boolean>(Boolean(r.acceptsPreorder));
+  const [cutoff, setCutoff] = useState<string>(r.preorderCutoffTime ?? "20:00");
+  const [start, setStart] = useState<string>(r.preorderDeliveryStart ?? "16:00");
+  const [end, setEnd] = useState<string>(r.preorderDeliveryEnd ?? "19:00");
+  const [leadDays, setLeadDays] = useState<number>(r.preorderLeadDays ?? 1);
+
+  // Sync state when the server pushes new data (e.g. after save).
+  useEffect(() => {
+    setEnabled(Boolean(r.acceptsPreorder));
+    if (r.preorderCutoffTime) setCutoff(r.preorderCutoffTime);
+    if (r.preorderDeliveryStart) setStart(r.preorderDeliveryStart);
+    if (r.preorderDeliveryEnd) setEnd(r.preorderDeliveryEnd);
+    if (r.preorderLeadDays) setLeadDays(r.preorderLeadDays);
+  }, [
+    r.acceptsPreorder,
+    r.preorderCutoffTime,
+    r.preorderDeliveryStart,
+    r.preorderDeliveryEnd,
+    r.preorderLeadDays,
+  ]);
+
+  const handleSave = () => {
+    onSave({
+      acceptsPreorder: enabled,
+      preorderCutoffTime: enabled ? cutoff : null,
+      preorderDeliveryStart: enabled ? start : null,
+      preorderDeliveryEnd: enabled ? end : null,
+      preorderLeadDays: enabled ? leadDays : 1,
+    });
+  };
+
+  return (
+    <div className="bg-white rounded-2xl border border-amber-100 shadow-sm p-5 mb-6">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <CalendarClock className="w-5 h-5 text-amber-500" />
+          <h2 className="text-base font-bold text-gray-900">พรีออเดอร์</h2>
+          {enabled ? (
+            <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-semibold">
+              เปิดรับ
+            </span>
+          ) : (
+            <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 font-semibold">
+              ปิด
+            </span>
+          )}
+        </div>
+        <label className="inline-flex items-center cursor-pointer">
+          <input
+            type="checkbox"
+            checked={enabled}
+            onChange={(e) => setEnabled(e.target.checked)}
+            className="sr-only peer"
+          />
+          <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-amber-300 rounded-full peer peer-checked:bg-amber-500 transition-colors relative after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-5" />
+        </label>
+      </div>
+      <p className="text-xs text-gray-500 mb-4 leading-relaxed">
+        เปิดให้ลูกค้าสั่งล่วงหน้า — ร้านนอกรัศมีปกติจะปรากฏในหน้า "พรีออเดอร์"
+        ของลูกค้า ออเดอร์รวมเป็นรอบส่งวันละครั้งตามเวลาที่กำหนด
+      </p>
+      {enabled && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">
+              ตัดออเดอร์
+            </label>
+            <input
+              type="time"
+              value={cutoff}
+              onChange={(e) => setCutoff(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300"
+            />
+            <p className="text-[10px] text-gray-400 mt-1">
+              สั่งหลังเวลานี้ → คิวรอบถัดไป
+            </p>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">
+              ส่งตั้งแต่
+            </label>
+            <input
+              type="time"
+              value={start}
+              onChange={(e) => setStart(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">
+              ส่งถึง
+            </label>
+            <input
+              type="time"
+              value={end}
+              onChange={(e) => setEnd(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">
+              ส่งล่วงหน้า (วัน)
+            </label>
+            <input
+              type="number"
+              min={1}
+              max={7}
+              value={leadDays}
+              onChange={(e) => setLeadDays(Math.max(1, Math.min(7, Number(e.target.value) || 1)))}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300"
+            />
+            <p className="text-[10px] text-gray-400 mt-1">1 = พรุ่งนี้</p>
+          </div>
+        </div>
+      )}
+      <div className="flex justify-end mt-4">
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold rounded-lg disabled:opacity-50"
+        >
+          {saving ? "กำลังบันทึก..." : "บันทึก"}
+        </button>
       </div>
     </div>
   );
