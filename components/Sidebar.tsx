@@ -24,6 +24,7 @@ import {
   Settings,
   Image,
   ShoppingBasket,
+  CalendarClock,
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 
@@ -42,6 +43,7 @@ const links = [
   { href: "/dashboard/approvals", label: "อนุมัติคำขอ", icon: ShieldCheck },
   { href: "/dashboard/categories", label: "หมวดหมู่", icon: Tag },
   { href: "/dashboard/markets", label: "ตลาดนัด", icon: ShoppingBasket },
+  { href: "/dashboard/preorders", label: "พรีออเดอร์", icon: CalendarClock },
   { href: "/dashboard/promos", label: "โปรโมโค้ด", icon: TicketPercent },
   { href: "/dashboard/flash-deals", label: "ดีลแฟลช", icon: Flame },
   { href: "/dashboard/banners", label: "จัดการ Banner", icon: Image },
