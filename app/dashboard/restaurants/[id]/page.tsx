@@ -3,7 +3,7 @@ import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { trpc, getToken } from "@/lib/trpc";
-import { ArrowLeft, Store, Star, Clock, Truck, ChevronRight, Package, Pencil, Plus, Trash2, Check, X, ImageIcon, Zap, ShoppingBasket, CalendarClock } from "lucide-react";
+import { ArrowLeft, Store, Star, Clock, Truck, ChevronRight, Package, Pencil, Plus, Trash2, Check, X, ImageIcon, Zap, ShoppingBasket, CalendarClock, Footprints } from "lucide-react";
 import ShareRestaurantButton from "@/components/ShareRestaurantButton";
 import OpeningHoursEditor from "@/components/OpeningHoursEditor";
 import MenuItemForm, {
@@ -57,6 +57,12 @@ export default function RestaurantDetailPage({ params }: { params: Promise<{ id:
   const setRestaurantPreorder = trpc.admin.setRestaurantPreorder.useMutation({
     onSuccess: () => utils.admin.getRestaurantDetail.invalidate({ id }),
     onError: (e) => alert("ตั้งค่าพรีออเดอร์ไม่สำเร็จ: " + e.message),
+  });
+  // Phase 4 — pickup ("รับที่ร้าน") configuration. Separate mutation
+  // so the toggle / ready-minutes don't touch unrelated fields.
+  const setRestaurantPickup = trpc.admin.setRestaurantPickup.useMutation({
+    onSuccess: () => utils.admin.getRestaurantDetail.invalidate({ id }),
+    onError: (e) => alert("ตั้งค่ารับที่ร้านไม่สำเร็จ: " + e.message),
   });
 
   const [editingInfo, setEditingInfo] = useState(false);
@@ -529,6 +535,15 @@ export default function RestaurantDetailPage({ params }: { params: Promise<{ id:
         saving={setRestaurantPreorder.isPending}
       />
 
+      {/* Pickup — Phase 4 */}
+      <PickupPanel
+        restaurant={r}
+        onSave={(payload) =>
+          setRestaurantPickup.mutate({ restaurantId: id, ...payload })
+        }
+        saving={setRestaurantPickup.isPending}
+      />
+
       {/* Menu Management */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
@@ -798,6 +813,104 @@ function PreorderPanel({
           onClick={handleSave}
           disabled={saving}
           className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold rounded-lg disabled:opacity-50"
+        >
+          {saving ? "กำลังบันทึก..." : "บันทึก"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * PickupPanel — Phase 4 admin UI for the "รับที่ร้าน" mode. Toggle
+ * flips acceptsPickup; when on, an ETA minutes field becomes editable.
+ */
+function PickupPanel({
+  restaurant,
+  onSave,
+  saving,
+}: {
+  restaurant: Record<string, unknown>;
+  onSave: (payload: {
+    acceptsPickup: boolean;
+    pickupReadyMinutes?: number | null;
+  }) => void;
+  saving: boolean;
+}) {
+  const r = restaurant as {
+    acceptsPickup?: boolean | null;
+    pickupReadyMinutes?: number | null;
+  };
+  const [enabled, setEnabled] = useState<boolean>(Boolean(r.acceptsPickup));
+  const [readyMin, setReadyMin] = useState<number>(r.pickupReadyMinutes ?? 20);
+
+  useEffect(() => {
+    setEnabled(Boolean(r.acceptsPickup));
+    if (r.pickupReadyMinutes) setReadyMin(r.pickupReadyMinutes);
+  }, [r.acceptsPickup, r.pickupReadyMinutes]);
+
+  const handleSave = () => {
+    onSave({
+      acceptsPickup: enabled,
+      pickupReadyMinutes: enabled ? readyMin : null,
+    });
+  };
+
+  return (
+    <div className="bg-white rounded-2xl border border-emerald-100 shadow-sm p-5 mb-6">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <Footprints className="w-5 h-5 text-emerald-500" />
+          <h2 className="text-base font-bold text-gray-900">รับที่ร้าน</h2>
+          {enabled ? (
+            <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-semibold">
+              เปิดรับ
+            </span>
+          ) : (
+            <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 font-semibold">
+              ปิด
+            </span>
+          )}
+        </div>
+        <label className="inline-flex items-center cursor-pointer">
+          <input
+            type="checkbox"
+            checked={enabled}
+            onChange={(e) => setEnabled(e.target.checked)}
+            className="sr-only peer"
+          />
+          <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-emerald-300 rounded-full peer peer-checked:bg-emerald-500 transition-colors relative after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-5" />
+        </label>
+      </div>
+      <p className="text-xs text-gray-500 mb-4 leading-relaxed">
+        เปิดให้ลูกค้ามารับที่ร้านเอง — ฟรีค่าส่ง ลูกค้าได้โค้ด 6 หลัก
+        แสดงให้แม่ค้าตรวจตอนรับของ
+      </p>
+      {enabled && (
+        <div className="grid grid-cols-2 gap-3 max-w-md">
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">
+              เวลาทำเฉลี่ย (นาที)
+            </label>
+            <input
+              type="number"
+              min={5}
+              max={120}
+              value={readyMin}
+              onChange={(e) => setReadyMin(Math.max(5, Math.min(120, Number(e.target.value) || 20)))}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-300"
+            />
+            <p className="text-[10px] text-gray-400 mt-1">
+              ลูกค้าเห็น "พร้อมรับใน ~{readyMin} นาที"
+            </p>
+          </div>
+        </div>
+      )}
+      <div className="flex justify-end mt-4">
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold rounded-lg disabled:opacity-50"
         >
           {saving ? "กำลังบันทึก..." : "บันทึก"}
         </button>
