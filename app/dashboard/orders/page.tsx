@@ -1,12 +1,32 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
-import { Trash2 } from "lucide-react";
+import {
+  Trash2,
+  X,
+  User,
+  Phone,
+  Mail,
+  Store,
+  CalendarClock,
+  Footprints,
+  Bike,
+  CreditCard,
+  MapPin,
+  Hash,
+  Clock,
+  ShoppingCart,
+} from "lucide-react";
 
 const STATUSES = ["", "pending", "preparing", "ready", "delivering", "delivered", "cancelled"] as const;
 const STATUS_LABELS: Record<string, string> = {
-  "": "ทั้งหมด", pending: "รอยืนยัน", preparing: "กำลังเตรียม",
-  ready: "พร้อมส่ง", delivering: "กำลังส่ง", delivered: "ส่งแล้ว", cancelled: "ยกเลิก",
+  "": "ทั้งหมด",
+  pending: "รอยืนยัน",
+  preparing: "กำลังเตรียม",
+  ready: "พร้อมส่ง",
+  delivering: "กำลังส่ง",
+  delivered: "ส่งแล้ว",
+  cancelled: "ยกเลิก",
 };
 const STATUS_COLORS: Record<string, string> = {
   pending: "bg-yellow-100 text-yellow-700",
@@ -17,27 +37,42 @@ const STATUS_COLORS: Record<string, string> = {
   cancelled: "bg-red-100 text-red-600",
 };
 
+const PAYMENT_LABELS: Record<string, string> = {
+  cash: "เงินสด",
+  promptpay: "PromptPay",
+  wallet: "Wallet",
+};
+
 export default function OrdersPage() {
   const [filterStatus, setFilterStatus] = useState("");
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkConfirm, setBulkConfirm] = useState(false);
+  const [detailOpen, setDetailOpen] = useState<string | null>(null);
+
   const { data: orders = [], isLoading, refetch } = trpc.admin.listOrders.useQuery(
     { status: filterStatus || undefined },
-    { refetchInterval: 15000 }
+    { refetchInterval: 15000 },
   );
   const updateStatus = trpc.admin.updateOrderStatus.useMutation({ onSuccess: () => refetch() });
   const deleteOrder = trpc.admin.deleteOrder.useMutation({
-    onSuccess: () => { setConfirmDelete(null); refetch(); },
+    onSuccess: () => {
+      setConfirmDelete(null);
+      refetch();
+    },
   });
   const deleteOrders = trpc.admin.deleteOrders.useMutation({
-    onSuccess: () => { setSelected(new Set()); setBulkConfirm(false); refetch(); },
+    onSuccess: () => {
+      setSelected(new Set());
+      setBulkConfirm(false);
+      refetch();
+    },
   });
 
-  // Drop selections that are no longer in the visible list (e.g. after filter change or refetch)
+  // Drop selections that are no longer in the visible list.
   useEffect(() => {
     if (selected.size === 0) return;
-    const visible = new Set(orders.map((o: any) => o.id));
+    const visible = new Set(orders.map((o) => o.id));
     let changed = false;
     const next = new Set<string>();
     selected.forEach((id) => {
@@ -47,7 +82,7 @@ export default function OrdersPage() {
     if (changed) setSelected(next);
   }, [orders, selected]);
 
-  const allVisibleSelected = orders.length > 0 && orders.every((o: any) => selected.has(o.id));
+  const allVisibleSelected = orders.length > 0 && orders.every((o) => selected.has(o.id));
   const someSelected = selected.size > 0 && !allVisibleSelected;
   const headerCbRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
@@ -56,7 +91,7 @@ export default function OrdersPage() {
 
   const toggleAll = () => {
     if (allVisibleSelected) setSelected(new Set());
-    else setSelected(new Set(orders.map((o: any) => o.id)));
+    else setSelected(new Set(orders.map((o) => o.id)));
   };
   const toggleOne = (id: string) => {
     setSelected((prev) => {
@@ -75,7 +110,7 @@ export default function OrdersPage() {
       </div>
 
       <div className="flex gap-2 flex-wrap mb-5">
-        {STATUSES.map(s => (
+        {STATUSES.map((s) => (
           <button
             key={s}
             onClick={() => setFilterStatus(s)}
@@ -130,6 +165,7 @@ export default function OrdersPage() {
                 </th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Order ID</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">ร้าน</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">ประเภท</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">ที่อยู่</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">ไรเดอร์</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">ยอด</th>
@@ -139,75 +175,117 @@ export default function OrdersPage() {
               </tr>
             </thead>
             <tbody>
-              {orders.map((o: any) => (
-                <tr
-                  key={o.id}
-                  className={`border-b border-gray-50 transition-colors ${
-                    selected.has(o.id) ? "bg-orange-50/50" : "hover:bg-gray-50/50"
-                  }`}
-                >
-                  <td className="px-4 py-3">
-                    <input
-                      type="checkbox"
-                      checked={selected.has(o.id)}
-                      onChange={() => toggleOne(o.id)}
-                      className="w-4 h-4 rounded border-gray-300 text-orange-500 focus:ring-orange-400 cursor-pointer"
-                      aria-label={`เลือก ${o.id.slice(-10)}`}
-                    />
-                  </td>
-                  <td className="px-4 py-3 text-gray-400 font-mono text-xs">{o.id.slice(-10)}</td>
-                  <td className="px-4 py-3 font-medium text-gray-900">{o.restaurantName}</td>
-                  <td className="px-4 py-3 text-gray-500 max-w-[140px] truncate text-xs">{o.deliveryAddress}</td>
-                  <td className="px-4 py-3 text-gray-500">{o.riderName ?? "—"}</td>
-                  <td className="px-4 py-3 font-medium">฿{o.totalAmount.toLocaleString()}</td>
-                  <td className="px-4 py-3">
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[o.status] ?? "bg-gray-100 text-gray-600"}`}>
-                      {STATUS_LABELS[o.status] ?? o.status}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-gray-400 text-xs whitespace-nowrap">
-                    {new Date(o.createdAt).toLocaleString("th-TH", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <select
-                        value={o.status}
-                        disabled={updateStatus.isPending}
-                        onChange={e => updateStatus.mutate({ orderId: o.id, status: e.target.value as any })}
-                        className="border border-gray-200 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-orange-400 disabled:opacity-50"
+              {orders.map((o) => {
+                const isPreorder = (o as { orderType?: string | null }).orderType === "preorder";
+                const isPickup = (o as { deliveryType?: string | null }).deliveryType === "pickup";
+                return (
+                  <tr
+                    key={o.id}
+                    className={`border-b border-gray-50 transition-colors cursor-pointer ${
+                      selected.has(o.id) ? "bg-orange-50/50" : "hover:bg-gray-50/50"
+                    }`}
+                    onClick={(e) => {
+                      // Don't open detail when clicking interactive elements
+                      const t = e.target as HTMLElement;
+                      if (t.closest("input,select,button,a")) return;
+                      setDetailOpen(o.id);
+                    }}
+                  >
+                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={selected.has(o.id)}
+                        onChange={() => toggleOne(o.id)}
+                        className="w-4 h-4 rounded border-gray-300 text-orange-500 focus:ring-orange-400 cursor-pointer"
+                        aria-label={`เลือก ${o.id.slice(-10)}`}
+                      />
+                    </td>
+                    <td className="px-4 py-3 text-gray-400 font-mono text-xs">
+                      <button
+                        type="button"
+                        onClick={() => setDetailOpen(o.id)}
+                        className="hover:text-orange-600 transition-colors"
                       >
-                        {(["pending","preparing","ready","delivering","delivered","cancelled"] as const).map(s => (
-                          <option key={s} value={s}>{STATUS_LABELS[s]}</option>
-                        ))}
-                      </select>
-                      {confirmDelete === o.id ? (
-                        <div className="flex items-center gap-1">
-                          <button
-                            onClick={() => deleteOrder.mutate({ orderId: o.id })}
-                            disabled={deleteOrder.isPending}
-                            className="text-xs px-2 py-1 bg-red-500 text-white rounded-lg hover:bg-red-600 disabled:opacity-50 transition-colors"
-                          >
-                            ยืนยัน
-                          </button>
-                          <button
-                            onClick={() => setConfirmDelete(null)}
-                            className="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition-colors"
-                          >
-                            ยกเลิก
-                          </button>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => setConfirmDelete(o.id)}
-                          className="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                        #{o.id.slice(-10)}
+                      </button>
+                    </td>
+                    <td className="px-4 py-3 font-medium text-gray-900">{o.restaurantName}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-1 flex-wrap">
+                        {isPreorder && (
+                          <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded-full">
+                            <CalendarClock className="w-2.5 h-2.5" /> พรีออเดอร์
+                          </span>
+                        )}
+                        {isPickup && (
+                          <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded-full">
+                            <Footprints className="w-2.5 h-2.5" /> รับที่ร้าน
+                          </span>
+                        )}
+                        {!isPreorder && !isPickup && (
+                          <span className="text-[11px] text-gray-400">เดลิเวอรี</span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-gray-500 max-w-[140px] truncate text-xs">{o.deliveryAddress}</td>
+                    <td className="px-4 py-3 text-gray-500">{o.riderName ?? "—"}</td>
+                    <td className="px-4 py-3 font-medium">฿{o.totalAmount.toLocaleString()}</td>
+                    <td className="px-4 py-3">
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[o.status] ?? "bg-gray-100 text-gray-600"}`}>
+                        {STATUS_LABELS[o.status] ?? o.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-gray-400 text-xs whitespace-nowrap">
+                      {new Date(o.createdAt).toLocaleString("th-TH", {
+                        day: "numeric",
+                        month: "short",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </td>
+                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center gap-2">
+                        <select
+                          value={o.status}
+                          disabled={updateStatus.isPending}
+                          onChange={(e) => updateStatus.mutate({ orderId: o.id, status: e.target.value as any })}
+                          className="border border-gray-200 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-orange-400 disabled:opacity-50"
                         >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                          {(["pending", "preparing", "ready", "delivering", "delivered", "cancelled"] as const).map((s) => (
+                            <option key={s} value={s}>
+                              {STATUS_LABELS[s]}
+                            </option>
+                          ))}
+                        </select>
+                        {confirmDelete === o.id ? (
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => deleteOrder.mutate({ orderId: o.id })}
+                              disabled={deleteOrder.isPending}
+                              className="text-xs px-2 py-1 bg-red-500 text-white rounded-lg hover:bg-red-600 disabled:opacity-50 transition-colors"
+                            >
+                              ยืนยัน
+                            </button>
+                            <button
+                              onClick={() => setConfirmDelete(null)}
+                              className="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition-colors"
+                            >
+                              ยกเลิก
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => setConfirmDelete(o.id)}
+                            className="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}
@@ -245,6 +323,326 @@ export default function OrdersPage() {
           </div>
         </div>
       )}
+
+      {detailOpen && (
+        <OrderDetailModal orderId={detailOpen} onClose={() => setDetailOpen(null)} />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Full-order modal — fetches admin.getOrderDetail when opened so we
+ * don't bloat the list query. Shows the customer (name + contact),
+ * the restaurant + owner, the priced items breakdown, and payment +
+ * type flags so the admin has everything they need to triage a
+ * specific order without leaving the list.
+ */
+function OrderDetailModal({
+  orderId,
+  onClose,
+}: {
+  orderId: string;
+  onClose: () => void;
+}) {
+  const { data, isLoading } = trpc.admin.getOrderDetail.useQuery({ orderId });
+
+  // Esc to close — keeps the modal keyboard-friendly for admin power users.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const o = data?.order;
+  const customer = data?.customer;
+  const items = data?.items ?? [];
+  const restaurant = data?.restaurant;
+  const merchantOwner = data?.merchantOwner;
+
+  const isPreorder = o?.orderType === "preorder";
+  const isPickup = o?.deliveryType === "pickup";
+
+  const formatDateTime = (d: Date | string | null | undefined) => {
+    if (!d) return "—";
+    return new Date(d).toLocaleString("th-TH", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/50 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-t-2xl md:rounded-2xl shadow-2xl w-full md:max-w-3xl max-h-[90vh] overflow-hidden flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="sticky top-0 px-5 py-4 bg-white border-b border-gray-100 flex items-center justify-between">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-orange-50 text-orange-600 flex items-center justify-center shrink-0">
+              <ShoppingCart className="w-5 h-5" />
+            </div>
+            <div className="min-w-0">
+              <h2 className="text-base font-bold text-gray-900 flex items-center gap-2">
+                <Hash className="w-3.5 h-3.5 text-gray-400" />
+                <span className="font-mono">{orderId.slice(-10)}</span>
+              </h2>
+              {o && (
+                <p className="text-xs text-gray-500 flex items-center gap-1.5 mt-0.5">
+                  <Clock className="w-3 h-3" />
+                  {formatDateTime(o.createdAt)}
+                </p>
+              )}
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-9 h-9 rounded-lg hover:bg-gray-100 flex items-center justify-center text-gray-500"
+            aria-label="ปิด"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+          {isLoading ? (
+            <p className="text-sm text-gray-400 text-center py-10">กำลังโหลด...</p>
+          ) : !o ? (
+            <p className="text-sm text-red-500 text-center py-10">ไม่พบออเดอร์</p>
+          ) : (
+            <>
+              {/* Status + type pills */}
+              <div className="flex flex-wrap items-center gap-2">
+                <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${STATUS_COLORS[o.status] ?? "bg-gray-100 text-gray-600"}`}>
+                  {STATUS_LABELS[o.status] ?? o.status}
+                </span>
+                {isPreorder && (
+                  <span className="inline-flex items-center gap-1 text-xs font-bold text-amber-700 bg-amber-100 px-2.5 py-1 rounded-full">
+                    <CalendarClock className="w-3 h-3" /> พรีออเดอร์
+                  </span>
+                )}
+                {isPickup ? (
+                  <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700 bg-emerald-100 px-2.5 py-1 rounded-full">
+                    <Footprints className="w-3 h-3" /> รับที่ร้าน
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 text-xs font-bold text-gray-600 bg-gray-100 px-2.5 py-1 rounded-full">
+                    <Bike className="w-3 h-3" /> เดลิเวอรี
+                  </span>
+                )}
+                <span className="inline-flex items-center gap-1 text-xs font-bold text-blue-700 bg-blue-50 px-2.5 py-1 rounded-full">
+                  <CreditCard className="w-3 h-3" />
+                  {PAYMENT_LABELS[o.paymentMethod] ?? o.paymentMethod}
+                </span>
+                {o.paymentStatus && (
+                  <span
+                    className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                      o.paymentStatus === "paid"
+                        ? "bg-green-100 text-green-700"
+                        : "bg-amber-100 text-amber-700"
+                    }`}
+                  >
+                    {o.paymentStatus === "paid" ? "จ่ายแล้ว" : "ค้างจ่าย"}
+                  </span>
+                )}
+              </div>
+
+              {/* Customer */}
+              <div className="bg-gray-50 rounded-xl p-4">
+                <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2">
+                  ลูกค้า
+                </p>
+                {customer ? (
+                  <div className="space-y-1.5">
+                    <p className="flex items-center gap-2 text-sm font-bold text-gray-900">
+                      <User className="w-4 h-4 text-gray-400" />
+                      {customer.name ?? "(ไม่มีชื่อ)"}
+                      <span className="text-gray-400 font-normal text-xs">#{customer.id}</span>
+                    </p>
+                    {customer.phone && (
+                      <a
+                        href={`tel:${customer.phone.replace(/\D/g, "")}`}
+                        className="flex items-center gap-2 text-sm text-blue-600 hover:underline"
+                      >
+                        <Phone className="w-4 h-4" />
+                        {customer.phone}
+                      </a>
+                    )}
+                    {customer.email && (
+                      <p className="flex items-center gap-2 text-xs text-gray-500">
+                        <Mail className="w-3.5 h-3.5" />
+                        {customer.email}
+                      </p>
+                    )}
+                    {customer.openId && (
+                      <p className="text-[10px] text-gray-400 font-mono break-all">
+                        {customer.openId}
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-400">
+                    Guest order (userId={o.userId})
+                  </p>
+                )}
+              </div>
+
+              {/* Restaurant */}
+              <div className="bg-gray-50 rounded-xl p-4">
+                <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2">
+                  ร้านอาหาร
+                </p>
+                <p className="flex items-center gap-2 text-sm font-bold text-gray-900">
+                  <Store className="w-4 h-4 text-gray-400" />
+                  {restaurant?.name ?? o.restaurantName}
+                </p>
+                {restaurant?.address && (
+                  <p className="text-xs text-gray-500 mt-1 flex items-start gap-1.5">
+                    <MapPin className="w-3.5 h-3.5 text-gray-400 mt-0.5 shrink-0" />
+                    {restaurant.address}
+                  </p>
+                )}
+                {merchantOwner && (
+                  <div className="mt-2 pt-2 border-t border-gray-200 text-xs space-y-1">
+                    <p className="text-gray-600">
+                      เจ้าของ: <span className="font-semibold">{merchantOwner.name ?? "—"}</span>
+                    </p>
+                    {merchantOwner.phone && (
+                      <a
+                        href={`tel:${merchantOwner.phone.replace(/\D/g, "")}`}
+                        className="text-blue-600 hover:underline inline-flex items-center gap-1"
+                      >
+                        <Phone className="w-3 h-3" />
+                        {merchantOwner.phone}
+                      </a>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Delivery */}
+              <div className="bg-gray-50 rounded-xl p-4">
+                <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2">
+                  จัดส่ง
+                </p>
+                <p className="text-sm text-gray-900 flex items-start gap-1.5">
+                  {isPickup ? (
+                    <Footprints className="w-4 h-4 text-emerald-500 mt-0.5 shrink-0" />
+                  ) : (
+                    <MapPin className="w-4 h-4 text-orange-500 mt-0.5 shrink-0" />
+                  )}
+                  <span className="break-words">{o.deliveryAddress ?? "—"}</span>
+                </p>
+                {o.deliveryNote && (
+                  <p className="text-xs text-gray-500 mt-2">
+                    หมายเหตุ: <span className="text-gray-700">{o.deliveryNote}</span>
+                  </p>
+                )}
+                {o.scheduledFor && (
+                  <p className="text-xs text-amber-700 mt-2 font-semibold flex items-center gap-1.5">
+                    <CalendarClock className="w-3.5 h-3.5" />
+                    นัดส่ง: {formatDateTime(o.scheduledFor)}
+                  </p>
+                )}
+                {o.riderName && (
+                  <p className="text-xs text-purple-700 mt-2 flex items-center gap-1.5">
+                    <Bike className="w-3.5 h-3.5" />
+                    ไรเดอร์: <span className="font-semibold">{o.riderName}</span>
+                  </p>
+                )}
+                {isPickup && o.pickupCode && o.status !== "delivered" && o.status !== "cancelled" && (
+                  <div className="mt-3 pt-3 border-t border-gray-200">
+                    <p className="text-[10px] uppercase tracking-wider text-emerald-700 font-bold">
+                      Pickup code
+                    </p>
+                    <p className="text-2xl font-extrabold text-emerald-900 tracking-[0.25em] mt-1">
+                      {o.pickupCode}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Items */}
+              <div className="bg-white border border-gray-100 rounded-xl overflow-hidden">
+                <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-100">
+                  <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">
+                    รายการอาหาร ({items.length})
+                  </p>
+                </div>
+                <div className="divide-y divide-gray-100">
+                  {items.map((it) => (
+                    <div key={it.id} className="px-4 py-3 flex items-center gap-3">
+                      <span className="w-7 h-7 rounded-full bg-orange-100 text-orange-600 text-xs font-bold flex items-center justify-center shrink-0">
+                        {it.quantity}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-gray-900 truncate">
+                          {it.name}
+                        </p>
+                        {(it as { specialRequest?: string | null }).specialRequest && (
+                          <p className="text-[11px] text-gray-500 mt-0.5">
+                            {(it as { specialRequest?: string | null }).specialRequest}
+                          </p>
+                        )}
+                      </div>
+                      <p className="text-sm font-bold text-gray-900 tabular-nums">
+                        ฿{(it.price * it.quantity).toLocaleString()}
+                      </p>
+                    </div>
+                  ))}
+                  {items.length === 0 && (
+                    <p className="px-4 py-6 text-sm text-gray-400 text-center">
+                      ไม่มีรายการ
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Totals */}
+              <div className="bg-orange-50/50 border border-orange-100 rounded-xl p-4 space-y-1.5 text-sm">
+                <div className="flex justify-between text-gray-600">
+                  <span>ค่าส่ง</span>
+                  <span className="tabular-nums">฿{(o.deliveryFee ?? 0).toLocaleString()}</span>
+                </div>
+                {(o.tipAmount ?? 0) > 0 && (
+                  <div className="flex justify-between text-gray-600">
+                    <span>ทิป</span>
+                    <span className="tabular-nums">฿{(o.tipAmount ?? 0).toLocaleString()}</span>
+                  </div>
+                )}
+                {(o.promoDiscount ?? 0) > 0 && (
+                  <div className="flex justify-between text-emerald-700">
+                    <span>ส่วนลด ({o.promoCode})</span>
+                    <span className="tabular-nums">−฿{(o.promoDiscount ?? 0).toLocaleString()}</span>
+                  </div>
+                )}
+                {(o.walletRedeemAmount ?? 0) > 0 && (
+                  <div className="flex justify-between text-emerald-700">
+                    <span>หักจาก wallet</span>
+                    <span className="tabular-nums">−฿{(o.walletRedeemAmount ?? 0).toLocaleString()}</span>
+                  </div>
+                )}
+                <div className="flex justify-between pt-2 mt-1 border-t border-orange-200 text-base font-extrabold text-gray-900">
+                  <span>ยอดรวม</span>
+                  <span className="text-orange-600 tabular-nums">
+                    ฿{o.totalAmount.toLocaleString()}
+                  </span>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
