@@ -16,6 +16,9 @@ import {
   Hash,
   Clock,
   ShoppingCart,
+  Ban,
+  Send,
+  CheckCircle2,
 } from "lucide-react";
 
 const STATUSES = ["", "pending", "preparing", "ready", "delivering", "delivered", "cancelled"] as const;
@@ -338,6 +341,18 @@ export default function OrdersPage() {
  * type flags so the admin has everything they need to triage a
  * specific order without leaving the list.
  */
+// Preset cancel reasons — fastest path is "click → send". The textarea
+// is for one-off cases the presets don't cover. Tweak this list when
+// the team finds new recurring reasons.
+const CANCEL_REASON_PRESETS = [
+  "ร้านยังไม่เปิด",
+  "ของหมด ไม่สามารถทำได้",
+  "ลูกค้าขอยกเลิก",
+  "ที่อยู่ส่งไม่ถึง / นอกพื้นที่",
+  "ไม่มีไรเดอร์รับงาน",
+  "ร้านไม่ตอบรับนาน",
+];
+
 function OrderDetailModal({
   orderId,
   onClose,
@@ -345,7 +360,22 @@ function OrderDetailModal({
   orderId: string;
   onClose: () => void;
 }) {
+  const utils = trpc.useUtils();
   const { data, isLoading } = trpc.admin.getOrderDetail.useQuery({ orderId });
+  const [cancelPanelOpen, setCancelPanelOpen] = useState(false);
+  const [cancelReason, setCancelReason] = useState("");
+  const [cancelResult, setCancelResult] = useState<
+    | { ok: true; refundAmount: number; refundedToWallet: boolean }
+    | null
+  >(null);
+  const cancelOrder = trpc.admin.cancelOrderWithReason.useMutation({
+    onSuccess: (res) => {
+      setCancelResult(res);
+      utils.admin.getOrderDetail.invalidate({ orderId });
+      utils.admin.listOrders.invalidate();
+    },
+    onError: (e) => alert("ยกเลิกไม่สำเร็จ: " + e.message),
+  });
 
   // Esc to close — keeps the modal keyboard-friendly for admin power users.
   useEffect(() => {
@@ -639,6 +669,109 @@ function OrderDetailModal({
                   </span>
                 </div>
               </div>
+
+              {/* Admin cancel action — shows only while the order is in
+                  a cancellable state. Confirmation result reports the
+                  refund amount + destination (wallet vs admin-handled). */}
+              {!["cancelled", "delivered"].includes(o.status) && !cancelResult && (
+                <div className="border-t border-gray-100 pt-4">
+                  {!cancelPanelOpen ? (
+                    <button
+                      onClick={() => setCancelPanelOpen(true)}
+                      className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-red-50 hover:bg-red-100 border border-red-200 text-red-700 text-sm font-bold rounded-xl transition-colors"
+                    >
+                      <Ban className="w-4 h-4" />
+                      ยกเลิกออเดอร์ + แจ้งลูกค้า
+                    </button>
+                  ) : (
+                    <div className="bg-red-50 border border-red-200 rounded-xl p-4 space-y-3">
+                      <p className="text-sm font-bold text-red-900">
+                        ยกเลิกออเดอร์ + ส่งข้อความแจ้งลูกค้าทาง LINE
+                      </p>
+                      <p className="text-xs text-red-700 leading-relaxed">
+                        เลือกเหตุผลที่ใช้บ่อย หรือพิมพ์เหตุผลเองด้านล่าง — ลูกค้าจะได้รับการแจ้งเตือนพร้อมเหตุผล
+                        {o.paymentMethod === "wallet" || (o.walletRedeemAmount ?? 0) > 0
+                          ? " และเงินจะคืนเข้ากระเป๋าทันที"
+                          : o.paymentMethod === "promptpay"
+                            ? " ส่วนเงินที่จ่ายผ่าน PromptPay แอดมินคืนเองภายหลัง"
+                            : ""}
+                      </p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {CANCEL_REASON_PRESETS.map((preset) => (
+                          <button
+                            key={preset}
+                            type="button"
+                            onClick={() => setCancelReason(preset)}
+                            className={`text-xs px-2.5 py-1.5 rounded-lg border transition-colors ${
+                              cancelReason === preset
+                                ? "bg-red-500 text-white border-red-500"
+                                : "bg-white text-red-700 border-red-200 hover:bg-red-100"
+                            }`}
+                          >
+                            {preset}
+                          </button>
+                        ))}
+                      </div>
+                      <textarea
+                        value={cancelReason}
+                        onChange={(e) => setCancelReason(e.target.value)}
+                        placeholder="หรือพิมพ์เหตุผลเอง..."
+                        rows={2}
+                        maxLength={280}
+                        className="w-full text-sm border border-red-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-red-300 resize-none"
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => {
+                            setCancelPanelOpen(false);
+                            setCancelReason("");
+                          }}
+                          className="px-4 py-2 text-sm rounded-lg bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 font-medium"
+                        >
+                          ยกเลิก
+                        </button>
+                        <button
+                          onClick={() =>
+                            cancelOrder.mutate({
+                              orderId,
+                              reason: cancelReason.trim(),
+                            })
+                          }
+                          disabled={
+                            !cancelReason.trim() || cancelOrder.isPending
+                          }
+                          className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 text-sm rounded-lg bg-red-500 hover:bg-red-600 text-white font-bold disabled:opacity-50"
+                        >
+                          <Send className="w-4 h-4" />
+                          {cancelOrder.isPending
+                            ? "กำลังยกเลิก..."
+                            : "ยืนยันยกเลิก + แจ้งลูกค้า"}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Success card — replaces the cancel panel after we
+                  successfully push the LINE message + refund. */}
+              {cancelResult && (
+                <div className="border-t border-gray-100 pt-4">
+                  <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-start gap-3">
+                    <CheckCircle2 className="w-5 h-5 text-green-600 mt-0.5 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold text-green-900">
+                        ยกเลิกสำเร็จ + แจ้งลูกค้าทาง LINE แล้ว
+                      </p>
+                      <p className="text-xs text-green-700 mt-1">
+                        {cancelResult.refundedToWallet
+                          ? `คืน ฿${cancelResult.refundAmount.toLocaleString()} เข้ากระเป๋าลูกค้าเรียบร้อย`
+                          : "ไม่มีการคืนเงินอัตโนมัติ (จ่ายปลายทาง / PromptPay รอแอดมินคืนเอง)"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
             </>
           )}
         </div>
