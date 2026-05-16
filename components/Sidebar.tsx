@@ -28,6 +28,7 @@ import {
   Settings,
   Image,
   X,
+  Car,
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 
@@ -47,6 +48,7 @@ const links = [
   { href: "/dashboard/categories", label: "หมวดหมู่", icon: Tag },
   { href: "/dashboard/markets", label: "ตลาดนัด", icon: ShoppingBasket },
   { href: "/dashboard/preorders", label: "พรีออเดอร์", icon: CalendarClock },
+  { href: "/dashboard/transport", label: "บริการรับส่ง", icon: Car },
   { href: "/dashboard/promos", label: "โปรโมโค้ด", icon: TicketPercent },
   { href: "/dashboard/flash-deals", label: "ดีลแฟลช", icon: Flame },
   { href: "/dashboard/banners", label: "จัดการ Banner", icon: Image },
