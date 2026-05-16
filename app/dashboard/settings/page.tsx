@@ -19,6 +19,7 @@ import {
   Wrench,
   Clock,
   ImageIcon,
+  Gift,
 } from "lucide-react";
 
 const TYPE_LABELS: Record<string, string> = {
@@ -1384,6 +1385,164 @@ function HomeCardsCard() {
   );
 }
 
+/**
+ * HomePromoBannerCard — admin-controlled marketing strip that sits
+ * below the service cards on /liff/home. Toggle on/off + fully
+ * editable copy and link. Off by default; staying off hides the
+ * banner from customers entirely.
+ *
+ * Persists 5 keys in systemSettings:
+ *   home_promo_banner_enabled  ("true" | "false")
+ *   home_promo_banner_title
+ *   home_promo_banner_subtitle
+ *   home_promo_banner_cta
+ *   home_promo_banner_href
+ */
+function HomePromoBannerCard() {
+  const utils = trpc.useUtils();
+  const { data: settingsRaw } = trpc.admin.getSettings.useQuery();
+  const updateSettings = trpc.admin.updateSettings.useMutation({
+    onSuccess: async () => {
+      await utils.admin.getSettings.invalidate();
+      setNotice({ type: "success", message: "บันทึกแล้ว" });
+      setTimeout(() => setNotice(null), 2400);
+    },
+    onError: (e) => setNotice({ type: "error", message: e.message }),
+  });
+  const settings = (settingsRaw || {}) as Record<string, string>;
+
+  const [enabled, setEnabled] = useState<boolean>(false);
+  const [title, setTitle] = useState<string>("");
+  const [subtitle, setSubtitle] = useState<string>("");
+  const [ctaLabel, setCtaLabel] = useState<string>("");
+  const [href, setHref] = useState<string>("");
+  const [notice, setNotice] = useState<{ type: "success" | "error"; message: string } | null>(null);
+
+  useEffect(() => {
+    setEnabled(settings.home_promo_banner_enabled === "true");
+    setTitle(settings.home_promo_banner_title ?? "");
+    setSubtitle(settings.home_promo_banner_subtitle ?? "");
+    setCtaLabel(settings.home_promo_banner_cta ?? "");
+    setHref(settings.home_promo_banner_href ?? "");
+  }, [
+    settings.home_promo_banner_enabled,
+    settings.home_promo_banner_title,
+    settings.home_promo_banner_subtitle,
+    settings.home_promo_banner_cta,
+    settings.home_promo_banner_href,
+  ]);
+
+  const save = async () => {
+    await updateSettings.mutateAsync({
+      home_promo_banner_enabled: enabled ? "true" : "false",
+      home_promo_banner_title: title.trim(),
+      home_promo_banner_subtitle: subtitle.trim(),
+      home_promo_banner_cta: ctaLabel.trim(),
+      home_promo_banner_href: href.trim(),
+    });
+  };
+
+  return (
+    <section className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 mb-6">
+      <div className="mb-5 flex items-start gap-3">
+        <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-500 flex items-center justify-center flex-shrink-0">
+          <Gift className="w-5 h-5" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <h2 className="text-lg font-bold text-gray-900">ป้ายโปรโมชั่นหน้าแรก</h2>
+          <p className="text-xs text-gray-400 mt-1">
+            แถบโปรโมชั่นด้านล่างการ์ดบริการบนหน้าแรก — เปิด/ปิดได้ทุกเมื่อ
+            ลูกค้ากดแล้วระบบจะพาไปยังลิงก์ที่ตั้งไว้
+          </p>
+        </div>
+      </div>
+
+      {notice && (
+        <div className={`mb-4 rounded-lg px-3 py-2 text-sm ${notice.type === "success" ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}`}>
+          {notice.message}
+        </div>
+      )}
+
+      <label className="flex items-center gap-3 mb-4 cursor-pointer">
+        <span className="relative inline-flex items-center">
+          <input
+            type="checkbox"
+            checked={enabled}
+            onChange={(e) => setEnabled(e.target.checked)}
+            className="sr-only peer"
+          />
+          <span className="w-11 h-6 bg-gray-200 peer-checked:bg-orange-500 rounded-full transition-colors" />
+          <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${enabled ? "translate-x-5" : ""}`} />
+        </span>
+        <div>
+          <p className="text-sm font-semibold text-gray-900">
+            {enabled ? "เปิดแสดงบนหน้าแรก" : "ปิดอยู่ (ลูกค้าไม่เห็นแบนเนอร์)"}
+          </p>
+          <p className="text-xs text-gray-400">
+            ถ้าปิดอยู่ ระบบจะไม่แสดงแบนเนอร์เลย แม้จะใส่ข้อความไว้แล้ว
+          </p>
+        </div>
+      </label>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <div>
+          <label className="block text-xs font-semibold text-gray-700 mb-1">หัวข้อ</label>
+          <input
+            type="text"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="เช่น โปรโมชั่นสุดพิเศษ!"
+            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-gray-700 mb-1">คำโปรย</label>
+          <input
+            type="text"
+            value={subtitle}
+            onChange={(e) => setSubtitle(e.target.value)}
+            placeholder="เช่น ส่วนลดมากมาย รอคุณอยู่"
+            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-gray-700 mb-1">ข้อความปุ่ม CTA</label>
+          <input
+            type="text"
+            value={ctaLabel}
+            onChange={(e) => setCtaLabel(e.target.value)}
+            placeholder="เช่น ดูทั้งหมด"
+            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-gray-700 mb-1">ลิงก์ปลายทาง</label>
+          <input
+            type="text"
+            value={href}
+            onChange={(e) => setHref(e.target.value)}
+            placeholder="เช่น /liff/food หรือ /liff/preorder"
+            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300"
+          />
+          <p className="text-[11px] text-gray-400 mt-1">
+            ใส่ path ภายในแอป เช่น /liff/food, /liff/preorder, /liff/market
+          </p>
+        </div>
+      </div>
+
+      <button
+        type="button"
+        onClick={save}
+        disabled={updateSettings.isPending}
+        className="mt-5 inline-flex items-center gap-2 rounded-lg bg-orange-500 text-white px-4 py-2.5 text-sm font-semibold disabled:opacity-60"
+      >
+        {updateSettings.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+        {updateSettings.isPending ? "กำลังบันทึก..." : "บันทึกแบนเนอร์"}
+      </button>
+    </section>
+  );
+}
+
 export default function SettingsPage() {
   return (
     <div>
@@ -1397,6 +1556,7 @@ export default function SettingsPage() {
       <SystemOperationsCard />
       <AppAvailabilityCard />
       <HomeCardsCard />
+      <HomePromoBannerCard />
       <DeliverySettings />
       <PromoSection />
     </div>
