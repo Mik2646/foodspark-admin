@@ -1576,6 +1576,174 @@ function HomePromoBannerCard() {
   );
 }
 
+/**
+ * TransportPricingCard — formulas behind the บริการรับส่ง fare quotes.
+ * The backend's transport.estimateFare + transport.create both read
+ * these keys at runtime, so saving here is enough to re-price ride
+ * + shopping services without a deploy.
+ */
+function TransportPricingCard() {
+  const utils = trpc.useUtils();
+  const { data: settingsRaw } = trpc.admin.getSettings.useQuery();
+  const updateSettings = trpc.admin.updateSettings.useMutation({
+    onSuccess: async () => {
+      await utils.admin.getSettings.invalidate();
+      setNotice({ type: "success", message: "บันทึกแล้ว" });
+      setTimeout(() => setNotice(null), 2400);
+    },
+    onError: (e) => setNotice({ type: "error", message: e.message }),
+  });
+  const s = (settingsRaw || {}) as Record<string, string>;
+
+  const [enabled, setEnabled] = useState<boolean>(true);
+  const [rideBase, setRideBase] = useState("30");
+  const [ridePerKm, setRidePerKm] = useState("10");
+  const [rideMin, setRideMin] = useState("40");
+  const [rideMax, setRideMax] = useState("300");
+  const [shopBase, setShopBase] = useState("30");
+  const [shopPerKm, setShopPerKm] = useState("8");
+  const [shopServicePct, setShopServicePct] = useState("10");
+  const [shopMinService, setShopMinService] = useState("20");
+  const [notice, setNotice] = useState<{ type: "success" | "error"; message: string } | null>(null);
+
+  useEffect(() => {
+    setEnabled(s.transport_enabled !== "false");
+    setRideBase(s.transport_ride_base_fee ?? "30");
+    setRidePerKm(s.transport_ride_per_km ?? "10");
+    setRideMin(s.transport_ride_min_fare ?? "40");
+    setRideMax(s.transport_ride_max_fare ?? "300");
+    setShopBase(s.transport_shopping_base_fee ?? "30");
+    setShopPerKm(s.transport_shopping_per_km ?? "8");
+    setShopServicePct(s.transport_shopping_service_pct ?? "10");
+    setShopMinService(s.transport_shopping_min_service_fee ?? "20");
+  }, [
+    s.transport_enabled,
+    s.transport_ride_base_fee, s.transport_ride_per_km,
+    s.transport_ride_min_fare, s.transport_ride_max_fare,
+    s.transport_shopping_base_fee, s.transport_shopping_per_km,
+    s.transport_shopping_service_pct, s.transport_shopping_min_service_fee,
+  ]);
+
+  const save = async () => {
+    await updateSettings.mutateAsync({
+      transport_enabled: enabled ? "true" : "false",
+      transport_ride_base_fee: rideBase.trim() || "0",
+      transport_ride_per_km: ridePerKm.trim() || "0",
+      transport_ride_min_fare: rideMin.trim() || "0",
+      transport_ride_max_fare: rideMax.trim() || "0",
+      transport_shopping_base_fee: shopBase.trim() || "0",
+      transport_shopping_per_km: shopPerKm.trim() || "0",
+      transport_shopping_service_pct: shopServicePct.trim() || "0",
+      transport_shopping_min_service_fee: shopMinService.trim() || "0",
+    });
+  };
+
+  return (
+    <section className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 mb-6">
+      <div className="mb-5 flex items-start gap-3">
+        <div className="w-10 h-10 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center flex-shrink-0">
+          <Wrench className="w-5 h-5" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <h2 className="text-lg font-bold text-gray-900">ราคาบริการรับส่ง</h2>
+          <p className="text-xs text-gray-400 mt-1">
+            สูตรคิดราคาบริการ "ส่งคน" และ "ซื้อของแทน" — แก้แล้วบันทึก
+            ระบบจะใช้สูตรใหม่ทันทีไม่ต้อง deploy
+          </p>
+        </div>
+      </div>
+
+      {notice && (
+        <div className={`mb-4 rounded-lg px-3 py-2 text-sm ${notice.type === "success" ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}`}>
+          {notice.message}
+        </div>
+      )}
+
+      <label className="flex items-center gap-3 mb-5 cursor-pointer">
+        <span className="relative inline-flex items-center">
+          <input
+            type="checkbox"
+            checked={enabled}
+            onChange={(e) => setEnabled(e.target.checked)}
+            className="sr-only peer"
+          />
+          <span className="w-11 h-6 bg-gray-200 peer-checked:bg-orange-500 rounded-full transition-colors" />
+          <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${enabled ? "translate-x-5" : ""}`} />
+        </span>
+        <div>
+          <p className="text-sm font-semibold text-gray-900">
+            {enabled ? "เปิดให้บริการรับส่ง" : "ปิดบริการ (ลูกค้าจะกดสั่งไม่ได้)"}
+          </p>
+          <p className="text-xs text-gray-400">
+            ปิดอยู่ — `transport.create` จะปฏิเสธคำสั่งซื้อ แต่ออเดอร์เดิมยังทำงานต่อ
+          </p>
+        </div>
+      </label>
+
+      {/* Ride */}
+      <div className="rounded-xl border border-blue-100 bg-blue-50/30 p-4 mb-3">
+        <h3 className="text-sm font-bold text-blue-900 mb-3">บริการส่งคน</h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <NumField label="ค่าเริ่มต้น (฿)" value={rideBase} onChange={setRideBase} />
+          <NumField label="ค่าระยะ (฿/กม.)" value={ridePerKm} onChange={setRidePerKm} />
+          <NumField label="ค่าต่ำสุด (฿)" value={rideMin} onChange={setRideMin} />
+          <NumField label="ค่าสูงสุด (฿)" value={rideMax} onChange={setRideMax} />
+        </div>
+        <p className="mt-2 text-[11px] text-blue-700">
+          สูตร: clamp[min, max] ของ (ค่าเริ่มต้น + ค่าระยะ × ระยะทาง)
+        </p>
+      </div>
+
+      {/* Shopping */}
+      <div className="rounded-xl border border-emerald-100 bg-emerald-50/30 p-4">
+        <h3 className="text-sm font-bold text-emerald-900 mb-3">บริการซื้อของแทน</h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <NumField label="ค่าเริ่มต้น (฿)" value={shopBase} onChange={setShopBase} />
+          <NumField label="ค่าระยะ (฿/กม.)" value={shopPerKm} onChange={setShopPerKm} />
+          <NumField label="ค่าบริการ (%)" value={shopServicePct} onChange={setShopServicePct} />
+          <NumField label="ค่าบริการขั้นต่ำ (฿)" value={shopMinService} onChange={setShopMinService} />
+        </div>
+        <p className="mt-2 text-[11px] text-emerald-700">
+          สูตร: ค่าเริ่มต้น + ค่าระยะ × ระยะทาง + max(ขั้นต่ำ, งบ × %)
+        </p>
+      </div>
+
+      <button
+        type="button"
+        onClick={save}
+        disabled={updateSettings.isPending}
+        className="mt-5 inline-flex items-center gap-2 rounded-lg bg-orange-500 text-white px-4 py-2.5 text-sm font-semibold disabled:opacity-60"
+      >
+        {updateSettings.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+        {updateSettings.isPending ? "กำลังบันทึก..." : "บันทึกสูตรราคา"}
+      </button>
+    </section>
+  );
+}
+
+function NumField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div>
+      <label className="block text-[11px] font-semibold text-gray-700 mb-1">{label}</label>
+      <input
+        type="number"
+        inputMode="decimal"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300"
+      />
+    </div>
+  );
+}
+
 export default function SettingsPage() {
   return (
     <div>
@@ -1591,6 +1759,7 @@ export default function SettingsPage() {
       <HomeCardsCard />
       <HomePromoBannerCard />
       <DeliverySettings />
+      <TransportPricingCard />
       <PromoSection />
     </div>
   );

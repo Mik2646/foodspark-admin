@@ -256,17 +256,35 @@ function TransportDetailModal({
   onClose: () => void;
   onChanged: () => Promise<void> | void;
 }) {
+  const [pickRiderId, setPickRiderId] = useState<number | "manual" | "">("");
   const [riderName, setRiderName] = useState(order.riderName ?? "");
   const [riderPhone, setRiderPhone] = useState(order.riderPhone ?? "");
   const [cancelReason, setCancelReason] = useState("");
   const [showCancel, setShowCancel] = useState(false);
 
+  // Approved-rider list for the dropdown. The admin can also fall back
+  // to manual entry for partner riders that aren't on the platform yet.
+  const { data: approvedRiders = [] } = trpc.admin.listApprovedRiders.useQuery();
+
   useEffect(() => {
+    setPickRiderId("");
     setRiderName(order.riderName ?? "");
     setRiderPhone(order.riderPhone ?? "");
     setCancelReason("");
     setShowCancel(false);
   }, [order.id, order.riderName, order.riderPhone]);
+
+  // When a registered rider is picked, auto-fill name + phone so the
+  // operator sees what's about to be sent.
+  useEffect(() => {
+    if (typeof pickRiderId === "number") {
+      const r = approvedRiders.find((x) => x.id === pickRiderId);
+      if (r) {
+        setRiderName(r.name ?? "");
+        setRiderPhone(r.phone ?? "");
+      }
+    }
+  }, [pickRiderId, approvedRiders]);
 
   const assignMut = trpc.admin.assignTransportRider.useMutation({
     onSuccess: () => onChanged(),
@@ -388,30 +406,63 @@ function TransportDetailModal({
           {/* Action panel */}
           {!finalised && (
             <DetailBlock title="จ่ายงานให้ไรเดอร์">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                <input
-                  type="text"
-                  value={riderName}
-                  onChange={(e) => setRiderName(e.target.value)}
-                  placeholder="ชื่อไรเดอร์"
-                  className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300"
-                />
-                <input
-                  type="tel"
-                  value={riderPhone}
-                  onChange={(e) => setRiderPhone(e.target.value)}
-                  placeholder="เบอร์โทรไรเดอร์"
-                  className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300"
-                />
-              </div>
+              <label className="block text-[11px] font-semibold text-gray-600 mb-1">
+                เลือกไรเดอร์ที่ลงทะเบียน (ส่ง LINE ให้ไรเดอร์ด้วย)
+              </label>
+              <select
+                value={pickRiderId === "" ? "" : String(pickRiderId)}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (v === "") setPickRiderId("");
+                  else if (v === "manual") {
+                    setPickRiderId("manual");
+                    setRiderName("");
+                    setRiderPhone("");
+                  } else setPickRiderId(Number(v));
+                }}
+                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300"
+              >
+                <option value="">— ยังไม่เลือก —</option>
+                {approvedRiders.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.name ?? "ไรเดอร์"}{r.phone ? ` · ${r.phone}` : ""}
+                  </option>
+                ))}
+                <option value="manual">— ใส่ชื่อ + เบอร์เอง (พาร์ตเนอร์นอกระบบ) —</option>
+              </select>
+              {(pickRiderId === "manual" || (pickRiderId === "" && (order.riderName || order.riderPhone))) && (
+                <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2">
+                  <input
+                    type="text"
+                    value={riderName}
+                    onChange={(e) => setRiderName(e.target.value)}
+                    placeholder="ชื่อไรเดอร์"
+                    className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300"
+                  />
+                  <input
+                    type="tel"
+                    value={riderPhone}
+                    onChange={(e) => setRiderPhone(e.target.value)}
+                    placeholder="เบอร์โทรไรเดอร์"
+                    className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300"
+                  />
+                </div>
+              )}
               <button
                 type="button"
-                disabled={assignMut.isPending || !riderName.trim() || !riderPhone.trim()}
+                disabled={
+                  assignMut.isPending ||
+                  (typeof pickRiderId !== "number" && (!riderName.trim() || !riderPhone.trim()))
+                }
                 onClick={() =>
                   assignMut.mutateAsync({
                     id: order.id,
-                    riderName: riderName.trim(),
-                    riderPhone: riderPhone.trim(),
+                    ...(typeof pickRiderId === "number"
+                      ? { riderId: pickRiderId }
+                      : {
+                          riderName: riderName.trim(),
+                          riderPhone: riderPhone.trim(),
+                        }),
                   })
                 }
                 className="mt-2 w-full inline-flex items-center justify-center gap-1.5 rounded-lg bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 text-sm font-semibold disabled:opacity-60"
