@@ -1221,37 +1221,50 @@ function HomeCardsCard() {
   const [preorderImage, setPreorderImage] = useState<string>(
     settings.home_card_preorder_image ?? "",
   );
+  const [transportImage, setTransportImage] = useState<string>(
+    settings.home_card_transport_image ?? "",
+  );
+  const [inspectionImage, setInspectionImage] = useState<string>(
+    settings.home_card_inspection_image ?? "",
+  );
   const [uploadingFood, setUploadingFood] = useState(false);
   const [uploadingMarket, setUploadingMarket] = useState(false);
   const [uploadingPreorder, setUploadingPreorder] = useState(false);
+  const [uploadingTransport, setUploadingTransport] = useState(false);
+  const [uploadingInspection, setUploadingInspection] = useState(false);
   const [notice, setNotice] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
   useEffect(() => {
     setFoodImage(settings.home_card_food_image ?? "");
     setMarketImage(settings.home_card_market_image ?? "");
     setPreorderImage(settings.home_card_preorder_image ?? "");
+    setTransportImage(settings.home_card_transport_image ?? "");
+    setInspectionImage(settings.home_card_inspection_image ?? "");
   }, [
     settings.home_card_food_image,
     settings.home_card_market_image,
     settings.home_card_preorder_image,
+    settings.home_card_transport_image,
+    settings.home_card_inspection_image,
   ]);
 
-  const handleUpload = async (
-    file: File,
-    target: "food" | "market" | "preorder",
-  ) => {
-    const setUploading =
-      target === "food"
-        ? setUploadingFood
-        : target === "market"
-          ? setUploadingMarket
-          : setUploadingPreorder;
-    const setImage =
-      target === "food"
-        ? setFoodImage
-        : target === "market"
-          ? setMarketImage
-          : setPreorderImage;
+  type SlotKey = "food" | "market" | "preorder" | "transport" | "inspection";
+
+  const handleUpload = async (file: File, target: SlotKey) => {
+    const setUploading = {
+      food: setUploadingFood,
+      market: setUploadingMarket,
+      preorder: setUploadingPreorder,
+      transport: setUploadingTransport,
+      inspection: setUploadingInspection,
+    }[target];
+    const setImage = {
+      food: setFoodImage,
+      market: setMarketImage,
+      preorder: setPreorderImage,
+      transport: setTransportImage,
+      inspection: setInspectionImage,
+    }[target];
     setUploading(true);
     try {
       const url = await uploadToR2(file, getToken());
@@ -1269,6 +1282,8 @@ function HomeCardsCard() {
       home_card_food_image: foodImage,
       home_card_market_image: marketImage,
       home_card_preorder_image: preorderImage,
+      home_card_transport_image: transportImage,
+      home_card_inspection_image: inspectionImage,
     });
   };
 
@@ -1335,7 +1350,9 @@ function HomeCardsCard() {
       <div className="mb-5">
         <h2 className="text-lg font-bold text-gray-900">การ์ดหน้าแรกของลูกค้า</h2>
         <p className="text-xs text-gray-400 mt-1">
-          การ์ด 3 อันที่ลูกค้าเห็นทันทีเมื่อเปิดแอป — "สั่งอาหาร" "ช้อปตลาดนัด" และ "พรีออเดอร์"
+          อัปโหลดรูปพื้นหลังให้การ์ดแต่ละบริการบนหน้าแรก — ไอคอน/ข้อความ/ปุ่ม
+          จะวางทับรูปอัตโนมัติพร้อม scrim ให้ตัวอักษรอ่านได้ ปล่อยช่องว่างไว้ก็ได้
+          (ระบบจะใช้สี gradient เดิมแทน)
         </p>
       </div>
 
@@ -1345,30 +1362,46 @@ function HomeCardsCard() {
         </div>
       )}
 
-      <div className="flex flex-col md:flex-row gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Slot
           title="สั่งอาหาร"
-          description="การ์ดทรงสูง คอลัมน์ซ้าย — เดลิเวอรีปกติ"
+          description="การ์ด hero ใหญ่สุด — เดลิเวอรีปกติ"
           imageUrl={foodImage}
           onUpload={(f) => void handleUpload(f, "food")}
           onClear={() => setFoodImage("")}
           uploading={uploadingFood}
         />
         <Slot
+          title="พรีออเดอร์"
+          description="แถวกลาง คอลัมน์ซ้าย — สั่งวันนี้ส่งพรุ่งนี้"
+          imageUrl={preorderImage}
+          onUpload={(f) => void handleUpload(f, "preorder")}
+          onClear={() => setPreorderImage("")}
+          uploading={uploadingPreorder}
+        />
+        <Slot
           title="ช้อปตลาดนัด"
-          description="ครึ่งบนคอลัมน์ขวา — ร้านในตลาดนัด"
+          description="แถวกลาง คอลัมน์กลาง — ร้านในตลาดนัด"
           imageUrl={marketImage}
           onUpload={(f) => void handleUpload(f, "market")}
           onClear={() => setMarketImage("")}
           uploading={uploadingMarket}
         />
         <Slot
-          title="พรีออเดอร์"
-          description="ครึ่งล่างคอลัมน์ขวา — สั่งวันนี้ส่งพรุ่งนี้"
-          imageUrl={preorderImage}
-          onUpload={(f) => void handleUpload(f, "preorder")}
-          onClear={() => setPreorderImage("")}
-          uploading={uploadingPreorder}
+          title="บริการรับส่ง"
+          description="แถวกลาง คอลัมน์ขวา — ส่งของ/เรียกรถ"
+          imageUrl={transportImage}
+          onUpload={(f) => void handleUpload(f, "transport")}
+          onClear={() => setTransportImage("")}
+          uploading={uploadingTransport}
+        />
+        <Slot
+          title="ตรวจสภาพ-พรบ."
+          description="แถบยาวสีม่วง — บริการนำรถไปตรวจสภาพ"
+          imageUrl={inspectionImage}
+          onUpload={(f) => void handleUpload(f, "inspection")}
+          onClear={() => setInspectionImage("")}
+          uploading={uploadingInspection}
         />
       </div>
 
