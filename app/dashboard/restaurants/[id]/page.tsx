@@ -3,7 +3,7 @@ import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { trpc, getToken } from "@/lib/trpc";
-import { ArrowLeft, Store, Star, Clock, Truck, ChevronRight, Package, Pencil, Plus, Trash2, Check, X, ImageIcon, Zap, ShoppingBasket, CalendarClock, Footprints } from "lucide-react";
+import { ArrowLeft, Store, Star, Clock, Truck, ChevronRight, Package, Pencil, Plus, Trash2, Check, X, ImageIcon, Zap, ShoppingBasket, CalendarClock, Footprints, Pause, Play, Loader2, Save } from "lucide-react";
 import ShareRestaurantButton from "@/components/ShareRestaurantButton";
 import OpeningHoursEditor from "@/components/OpeningHoursEditor";
 import MenuItemForm, {
@@ -473,6 +473,25 @@ export default function RestaurantDetailPage({ params }: { params: Promise<{ id:
         saving={setRestaurantType.isPending}
       />
 
+      {/* Phase 5.5/5.6 — Admin-side pause controls. Same effect as the
+          merchant-side controls under /merchant/restaurant: manual
+          one-shot pause + recurring scheduled-pause windows. */}
+      <RestaurantPausePanel
+        restaurantId={id}
+        pausedUntil={
+          r.pausedUntil
+            ? typeof r.pausedUntil === "string"
+              ? r.pausedUntil
+              : new Date(r.pausedUntil as unknown as string).toISOString()
+            : null
+        }
+        pauseReason={(r as { pauseReason?: string | null }).pauseReason ?? null}
+        scheduledPauses={
+          ((r as { scheduledPauses?: ScheduledPauseRow[] | null }).scheduledPauses) ?? []
+        }
+        onChanged={() => utils.admin.getRestaurantDetail.invalidate({ id })}
+      />
+
       {/* Menu Management */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
@@ -917,6 +936,327 @@ function RestaurantTypePanel({
           {saving ? "กำลังบันทึก..." : "บันทึกประเภทร้าน"}
         </button>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Phase 5.5/5.6 — admin-side pause controls. Mirrors the merchant
+ * panel under /merchant/restaurant but keyed by restaurantId so an
+ * admin can operate for any shop.
+ */
+type ScheduledPauseRow = {
+  start: string;
+  end: string;
+  days: number[];
+  note?: string | null;
+  enabled: boolean;
+};
+
+function RestaurantPausePanel({
+  restaurantId,
+  pausedUntil,
+  pauseReason,
+  scheduledPauses,
+  onChanged,
+}: {
+  restaurantId: string;
+  pausedUntil: string | null;
+  pauseReason: string | null;
+  scheduledPauses: ScheduledPauseRow[];
+  onChanged: () => void | Promise<void>;
+}) {
+  const [, setTick] = useState(0);
+  const [duration, setDuration] = useState<15 | 30 | 60 | 120>(30);
+  const [reason, setReason] = useState("");
+  const [rows, setRows] = useState<ScheduledPauseRow[]>(scheduledPauses);
+  const [savingSchedule, setSavingSchedule] = useState(false);
+  const [scheduleNotice, setScheduleNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    setRows(Array.isArray(scheduledPauses) ? scheduledPauses : []);
+  }, [scheduledPauses]);
+
+  // Local 15s ticker so the displayed countdown stays fresh.
+  useEffect(() => {
+    if (!pausedUntil) return;
+    const t = window.setInterval(() => setTick((n) => n + 1), 15 * 1000);
+    return () => window.clearInterval(t);
+  }, [pausedUntil]);
+
+  const pauseMut = trpc.admin.pauseRestaurantOrders.useMutation({
+    onSuccess: () => onChanged(),
+    onError: (e) => alert("หยุดรับไม่สำเร็จ: " + e.message),
+  });
+  const resumeMut = trpc.admin.resumeRestaurantOrders.useMutation({
+    onSuccess: () => onChanged(),
+    onError: (e) => alert("เปิดร้านไม่สำเร็จ: " + e.message),
+  });
+  const scheduleMut = trpc.admin.setRestaurantScheduledPauses.useMutation({
+    onSuccess: async () => {
+      await onChanged();
+      setScheduleNotice("บันทึกแล้ว");
+      setTimeout(() => setScheduleNotice(null), 2400);
+    },
+    onError: (e) => setScheduleNotice(e.message),
+  });
+
+  const isPaused = pausedUntil != null && new Date(pausedUntil).getTime() > Date.now();
+  const minutesLeft = pausedUntil
+    ? Math.max(0, Math.round((new Date(pausedUntil).getTime() - Date.now()) / 60000))
+    : 0;
+  const pauseLabel = (() => {
+    if (!pausedUntil) return "";
+    const d = new Date(pausedUntil);
+    return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  })();
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+      <div className="px-6 py-4 border-b border-gray-100">
+        <h2 className="text-base font-bold text-gray-900 inline-flex items-center gap-1.5">
+          <Pause className="w-4 h-4 text-amber-600" /> หยุดรับออเดอร์
+        </h2>
+        <p className="text-xs text-gray-400 mt-1">
+          จัดการแทนร้าน — ทั้งหยุดด่วน (one-shot) และตั้งช่วงเวลาประจำ
+        </p>
+      </div>
+
+      <div className="p-6 space-y-5">
+        {/* Manual pause */}
+        {isPaused ? (
+          <div className="rounded-xl bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200 p-4">
+            <div className="flex items-start gap-3">
+              <Pause className="w-5 h-5 text-amber-700 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-extrabold text-amber-900">
+                  หยุดรับออเดอร์อยู่
+                </p>
+                <p className="text-xs text-amber-800 mt-0.5">
+                  เปิดอีกครั้ง {pauseLabel} น. (อีก {minutesLeft} นาที)
+                </p>
+                {pauseReason && (
+                  <p className="text-[11px] text-amber-700 mt-1">เหตุผล: {pauseReason}</p>
+                )}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => resumeMut.mutate({ restaurantId })}
+              disabled={resumeMut.isPending}
+              className="mt-3 w-full inline-flex items-center justify-center gap-1.5 rounded-lg bg-green-500 hover:bg-green-600 text-white py-2 text-sm font-bold disabled:opacity-60"
+            >
+              <Play size={14} />
+              {resumeMut.isPending ? "กำลังเปิดร้าน..." : "เปิดรับออเดอร์ทันที"}
+            </button>
+          </div>
+        ) : (
+          <div className="rounded-xl border border-gray-100 p-4">
+            <p className="text-sm font-semibold text-gray-800 mb-1">หยุดรับด่วน (one-shot)</p>
+            <p className="text-[11px] text-gray-500 leading-snug mb-3">
+              ใช้ตอนร้านลูกค้าหน้าร้านเยอะ ระบบจะกลับมารับออเดอร์อัตโนมัติเมื่อครบเวลา
+            </p>
+            <div className="grid grid-cols-4 gap-2 mb-2">
+              {([15, 30, 60, 120] as const).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setDuration(m)}
+                  className={`py-2 rounded-lg text-sm font-bold border ${
+                    duration === m
+                      ? "bg-amber-500 text-white border-amber-500"
+                      : "bg-white text-gray-700 border-gray-200"
+                  }`}
+                >
+                  {m < 60 ? `${m} นาที` : `${m / 60} ชม.`}
+                </button>
+              ))}
+            </div>
+            <input
+              type="text"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              maxLength={120}
+              placeholder="เหตุผล (ไม่บังคับ)"
+              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300"
+            />
+            <button
+              type="button"
+              onClick={() =>
+                pauseMut.mutate({
+                  restaurantId,
+                  durationMinutes: duration,
+                  reason: reason.trim() || undefined,
+                })
+              }
+              disabled={pauseMut.isPending}
+              className="mt-2 w-full inline-flex items-center justify-center gap-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white py-2 text-sm font-bold disabled:opacity-60"
+            >
+              <Pause size={14} />
+              {pauseMut.isPending
+                ? "กำลังหยุดรับ..."
+                : `หยุดรับ ${duration < 60 ? `${duration} นาที` : `${duration / 60} ชม.`}`}
+            </button>
+          </div>
+        )}
+
+        {/* Scheduled recurring pauses */}
+        <div className="rounded-xl border border-gray-100 p-4">
+          <p className="text-sm font-semibold text-gray-800 inline-flex items-center gap-1.5">
+            <Clock className="w-3.5 h-3.5 text-orange-600" /> งดรับออเดอร์ตามเวลา (ประจำ)
+          </p>
+          <p className="text-[11px] text-gray-500 leading-snug mb-3">
+            ตั้งช่วงเวลาประจำ เช่น 11:00-13:00 จันทร์-ศุกร์ ระบบจะปิดรับออเดอร์ในแอปอัตโนมัติ
+          </p>
+
+          {scheduleNotice && (
+            <div className="mb-2 rounded-lg bg-green-50 border border-green-200 px-3 py-1.5 text-xs text-green-700">
+              {scheduleNotice}
+            </div>
+          )}
+
+          <div className="space-y-2">
+            {rows.length === 0 && (
+              <p className="text-[12px] text-gray-400 text-center py-3 border border-dashed border-gray-200 rounded-lg">
+                ยังไม่มีช่วงเวลาที่ตั้งไว้
+              </p>
+            )}
+            {rows.map((r, idx) => (
+              <AdminScheduledPauseRow
+                key={idx}
+                row={r}
+                onChange={(patch) =>
+                  setRows((prev) => prev.map((x, i) => (i === idx ? { ...x, ...patch } : x)))
+                }
+                onRemove={() => setRows((prev) => prev.filter((_, i) => i !== idx))}
+                onToggleDay={(day) =>
+                  setRows((prev) =>
+                    prev.map((x, i) => {
+                      if (i !== idx) return x;
+                      const set = new Set(x.days);
+                      if (set.has(day)) set.delete(day);
+                      else set.add(day);
+                      return { ...x, days: Array.from(set).sort((a, b) => a - b) };
+                    }),
+                  )
+                }
+              />
+            ))}
+          </div>
+
+          <button
+            type="button"
+            onClick={() =>
+              setRows((prev) => [
+                ...prev,
+                { start: "11:00", end: "13:00", days: [1, 2, 3, 4, 5], note: "", enabled: true },
+              ])
+            }
+            className="mt-2 w-full inline-flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-orange-300 bg-orange-50 text-orange-700 py-2 text-sm font-semibold"
+          >
+            <Plus className="w-3.5 h-3.5" /> เพิ่มช่วงงดรับออเดอร์
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setSavingSchedule(true);
+              scheduleMut
+                .mutateAsync({
+                  restaurantId,
+                  windows: rows.map((r) => ({
+                    start: r.start,
+                    end: r.end,
+                    days: r.days,
+                    note: r.note?.trim() || null,
+                    enabled: r.enabled,
+                  })),
+                })
+                .finally(() => setSavingSchedule(false));
+            }}
+            disabled={savingSchedule || scheduleMut.isPending}
+            className="mt-2 w-full inline-flex items-center justify-center gap-1.5 rounded-lg bg-orange-500 hover:bg-orange-600 text-white py-2 text-sm font-bold disabled:opacity-60"
+          >
+            {scheduleMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+            บันทึกตารางเวลา
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const ADMIN_DAY_LABELS = ["อา", "จ", "อ", "พ", "พฤ", "ศ", "ส"];
+
+function AdminScheduledPauseRow({
+  row,
+  onChange,
+  onRemove,
+  onToggleDay,
+}: {
+  row: ScheduledPauseRow;
+  onChange: (patch: Partial<ScheduledPauseRow>) => void;
+  onRemove: () => void;
+  onToggleDay: (day: number) => void;
+}) {
+  return (
+    <div className={`rounded-lg border ${row.enabled ? "border-amber-200 bg-amber-50/40" : "border-gray-200 bg-gray-50 opacity-70"} p-3`}>
+      <div className="flex items-center gap-2">
+        <input
+          type="time"
+          value={row.start}
+          onChange={(e) => onChange({ start: e.target.value })}
+          className="rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300"
+        />
+        <span className="text-gray-400 text-sm">ถึง</span>
+        <input
+          type="time"
+          value={row.end}
+          onChange={(e) => onChange({ end: e.target.value })}
+          className="rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300"
+        />
+        <button
+          type="button"
+          onClick={() => onChange({ enabled: !row.enabled })}
+          className={`ml-auto px-2 py-1 rounded text-[11px] font-bold ${row.enabled ? "bg-amber-500 text-white" : "bg-gray-200 text-gray-600"}`}
+        >
+          {row.enabled ? "เปิดใช้" : "ปิดไว้"}
+        </button>
+        <button
+          type="button"
+          onClick={onRemove}
+          className="w-7 h-7 rounded bg-rose-50 text-rose-500 flex items-center justify-center"
+        >
+          <X size={14} />
+        </button>
+      </div>
+
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {ADMIN_DAY_LABELS.map((lbl, day) => {
+          const active = row.days.includes(day);
+          return (
+            <button
+              key={day}
+              type="button"
+              onClick={() => onToggleDay(day)}
+              className={`w-8 h-8 rounded-full text-xs font-bold ${
+                active ? "bg-amber-500 text-white" : "bg-white text-gray-600 border border-gray-200"
+              }`}
+            >
+              {lbl}
+            </button>
+          );
+        })}
+      </div>
+
+      <input
+        type="text"
+        value={row.note ?? ""}
+        onChange={(e) => onChange({ note: e.target.value })}
+        maxLength={120}
+        placeholder="เหตุผล (ไม่บังคับ) เช่น พักช่วงเที่ยง"
+        className="mt-2 w-full rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300"
+      />
     </div>
   );
 }
