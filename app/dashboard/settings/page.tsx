@@ -1294,6 +1294,8 @@ function HomeCardsCard() {
     onUpload,
     onClear,
     uploading,
+    aspectClass,
+    aspectLabel,
   }: {
     title: string;
     description: string;
@@ -1301,12 +1303,18 @@ function HomeCardsCard() {
     onUpload: (file: File) => void;
     onClear: () => void;
     uploading: boolean;
+    /** Tailwind aspect-ratio class for both the preview and the
+     *  upload dropzone — matches the actual card shape on /liff/home
+     *  so the admin sees what the customer will see. */
+    aspectClass: string;
+    /** Human-readable aspect hint, e.g. "1:1", "5:6", "5:1". */
+    aspectLabel: string;
   }) => (
     <div className="flex-1 min-w-0">
       <p className="font-semibold text-gray-900">{title}</p>
       <p className="text-xs text-gray-400 mt-0.5 mb-3">{description}</p>
       {imageUrl ? (
-        <div className="relative aspect-square rounded-xl overflow-hidden border border-gray-200 bg-gray-50">
+        <div className={`relative ${aspectClass} rounded-xl overflow-hidden border border-gray-200 bg-gray-50`}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={imageUrl} alt={title} className="absolute inset-0 w-full h-full object-cover" />
           <button
@@ -1320,7 +1328,7 @@ function HomeCardsCard() {
         </div>
       ) : (
         <label
-          className={`flex flex-col items-center justify-center gap-2 cursor-pointer rounded-xl border-2 border-dashed aspect-square ${
+          className={`flex flex-col items-center justify-center gap-2 cursor-pointer rounded-xl border-2 border-dashed ${aspectClass} ${
             uploading ? "border-orange-300 bg-orange-50 text-orange-400" : "border-gray-300 bg-gray-50 text-gray-600 hover:bg-gray-100"
           }`}
         >
@@ -1339,7 +1347,7 @@ function HomeCardsCard() {
           <span className="text-sm font-semibold">
             {uploading ? "กำลังอัปโหลด…" : "อัปโหลดรูป"}
           </span>
-          <span className="text-xs text-gray-400">PNG / JPG · สี่เหลี่ยมจัตุรัส 1:1</span>
+          <span className="text-xs text-gray-400">PNG / JPG · {aspectLabel}</span>
         </label>
       )}
     </div>
@@ -1350,9 +1358,10 @@ function HomeCardsCard() {
       <div className="mb-5">
         <h2 className="text-lg font-bold text-gray-900">การ์ดหน้าแรกของลูกค้า</h2>
         <p className="text-xs text-gray-400 mt-1">
-          อัปโหลดรูปพื้นหลังให้การ์ดแต่ละบริการบนหน้าแรก — ไอคอน/ข้อความ/ปุ่ม
-          จะวางทับรูปอัตโนมัติพร้อม scrim ให้ตัวอักษรอ่านได้ ปล่อยช่องว่างไว้ก็ได้
-          (ระบบจะใช้สี gradient เดิมแทน)
+          อัปโหลดรูปพื้นหลังให้การ์ดแต่ละบริการบนหน้าแรก — แต่ละการ์ดมี
+          อัตราส่วนต่างกัน (ดูป้ายใต้ช่องอัปโหลดของแต่ละอัน) ระบบจะวาง
+          ไอคอน/ข้อความ/ปุ่มทับรูปอัตโนมัติพร้อม scrim ให้อ่านได้
+          ปล่อยช่องว่างไว้ก็ได้ (ระบบจะใช้สี gradient เดิมแทน)
         </p>
       </div>
 
@@ -1362,7 +1371,11 @@ function HomeCardsCard() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {/* Layout mirrors /liff/home: 1 hero row, 3-col medium row, 1
+          wide row. Each Slot's aspect ratio matches the actual card so
+          the admin sees exactly how the upload will be cropped. */}
+      <div className="space-y-4">
+        {/* Hero — same aspect-[1.55/1] as /liff/home HomeHeroCard. */}
         <Slot
           title="สั่งอาหาร"
           description="การ์ด hero ใหญ่สุด — เดลิเวอรีปกติ"
@@ -1370,31 +1383,45 @@ function HomeCardsCard() {
           onUpload={(f) => void handleUpload(f, "food")}
           onClear={() => setFoodImage("")}
           uploading={uploadingFood}
+          aspectClass="aspect-[1.55/1]"
+          aspectLabel="แนวนอน 1.55 : 1 (เช่น 1550 × 1000 px)"
         />
-        <Slot
-          title="พรีออเดอร์"
-          description="แถวกลาง คอลัมน์ซ้าย — สั่งวันนี้ส่งพรุ่งนี้"
-          imageUrl={preorderImage}
-          onUpload={(f) => void handleUpload(f, "preorder")}
-          onClear={() => setPreorderImage("")}
-          uploading={uploadingPreorder}
-        />
-        <Slot
-          title="ช้อปตลาดนัด"
-          description="แถวกลาง คอลัมน์กลาง — ร้านในตลาดนัด"
-          imageUrl={marketImage}
-          onUpload={(f) => void handleUpload(f, "market")}
-          onClear={() => setMarketImage("")}
-          uploading={uploadingMarket}
-        />
-        <Slot
-          title="บริการรับส่ง"
-          description="แถวกลาง คอลัมน์ขวา — ส่งของ/เรียกรถ"
-          imageUrl={transportImage}
-          onUpload={(f) => void handleUpload(f, "transport")}
-          onClear={() => setTransportImage("")}
-          uploading={uploadingTransport}
-        />
+
+        {/* 3-col medium row — aspect-[5/6] portrait each. */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <Slot
+            title="พรีออเดอร์"
+            description="แถวกลาง คอลัมน์ซ้าย — สั่งวันนี้ส่งพรุ่งนี้"
+            imageUrl={preorderImage}
+            onUpload={(f) => void handleUpload(f, "preorder")}
+            onClear={() => setPreorderImage("")}
+            uploading={uploadingPreorder}
+            aspectClass="aspect-[5/6]"
+            aspectLabel="แนวตั้ง 5 : 6 (เช่น 1000 × 1200 px)"
+          />
+          <Slot
+            title="ช้อปตลาดนัด"
+            description="แถวกลาง คอลัมน์กลาง — ร้านในตลาดนัด"
+            imageUrl={marketImage}
+            onUpload={(f) => void handleUpload(f, "market")}
+            onClear={() => setMarketImage("")}
+            uploading={uploadingMarket}
+            aspectClass="aspect-[5/6]"
+            aspectLabel="แนวตั้ง 5 : 6 (เช่น 1000 × 1200 px)"
+          />
+          <Slot
+            title="บริการรับส่ง"
+            description="แถวกลาง คอลัมน์ขวา — ส่งของ/เรียกรถ"
+            imageUrl={transportImage}
+            onUpload={(f) => void handleUpload(f, "transport")}
+            onClear={() => setTransportImage("")}
+            uploading={uploadingTransport}
+            aspectClass="aspect-[5/6]"
+            aspectLabel="แนวตั้ง 5 : 6 (เช่น 1000 × 1200 px)"
+          />
+        </div>
+
+        {/* Wide pill — bottom of /liff/home, very landscape. */}
         <Slot
           title="ตรวจสภาพ-พรบ."
           description="แถบยาวสีม่วง — บริการนำรถไปตรวจสภาพ"
@@ -1402,6 +1429,8 @@ function HomeCardsCard() {
           onUpload={(f) => void handleUpload(f, "inspection")}
           onClear={() => setInspectionImage("")}
           uploading={uploadingInspection}
+          aspectClass="aspect-[4/1]"
+          aspectLabel="แนวนอน 4 : 1 (เช่น 1600 × 400 px)"
         />
       </div>
 
