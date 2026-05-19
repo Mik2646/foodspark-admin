@@ -8,7 +8,7 @@
  * through the status flow. Each transition fires a LINE notify to the
  * customer.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import {
   Bike,
@@ -18,8 +18,10 @@ import {
   Clock,
   Loader2,
   MapPin,
+  MessageSquare,
   Phone,
   RefreshCw,
+  Send,
   ShoppingBag,
   StickyNote,
   Users,
@@ -99,15 +101,23 @@ export default function AdminTransportPage() {
             ลูกค้าจะได้รับ LINE notify ทุกครั้งที่สถานะเปลี่ยน
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => refetch()}
-          disabled={isFetching}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-60"
-        >
-          {isFetching ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-          รีเฟรช
-        </button>
+        <div className="flex items-center gap-2">
+          <a
+            href="/dashboard/transport/settlement"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 px-3 py-2 text-sm font-semibold hover:bg-emerald-100"
+          >
+            สรุปรายได้ไรเดอร์
+          </a>
+          <button
+            type="button"
+            onClick={() => refetch()}
+            disabled={isFetching}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+          >
+            {isFetching ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+            รีเฟรช
+          </button>
+        </div>
       </div>
 
       <div className="mb-4 flex flex-wrap gap-2">
@@ -403,6 +413,9 @@ function TransportDetailModal({
             <Row label="รวม" value={`฿${order.totalFare.toLocaleString()}`} bold />
           </DetailBlock>
 
+          {/* Admin can see the customer ↔ rider chat and chime in. */}
+          <AdminTransportChat transportId={order.id} />
+
           {/* Action panel */}
           {!finalised && (
             <DetailBlock title="จ่ายงานให้ไรเดอร์">
@@ -592,5 +605,106 @@ function Row({ label, value, bold }: { label: string; value: string; bold?: bool
       <span className="text-gray-500 text-xs">{label}</span>
       <span className={bold ? "font-bold text-orange-600 text-base" : "text-gray-800"}>{value}</span>
     </div>
+  );
+}
+
+/**
+ * Admin-side view of the customer ↔ rider chat thread. Operators can
+ * read the conversation and post on behalf of "แอดมิน" — useful for
+ * coordinating delivery hand-offs or apologizing for a delay. Each
+ * admin message LINE-notifies both customer and rider.
+ */
+function AdminTransportChat({ transportId }: { transportId: string }) {
+  const utils = trpc.useUtils();
+  const { data: messages = [] } = trpc.admin.listTransportMessages.useQuery(
+    { transportId },
+    { refetchInterval: 10 * 1000 },
+  );
+  const sendMut = trpc.admin.sendTransportMessage.useMutation({
+    onSuccess: () => utils.admin.listTransportMessages.invalidate({ transportId }),
+  });
+  const [draft, setDraft] = useState("");
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!scrollRef.current) return;
+    scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  }, [messages.length]);
+
+  const handleSend = () => {
+    const content = draft.trim();
+    if (!content || sendMut.isPending) return;
+    setDraft("");
+    sendMut.mutate({ transportId, content });
+  };
+
+  return (
+    <section className="rounded-xl border border-blue-100 bg-blue-50/30 p-3">
+      <p className="text-[11px] font-bold text-blue-700 uppercase tracking-wide mb-2 inline-flex items-center gap-1.5">
+        <MessageSquare className="w-3 h-3" /> ห้องแชท (ลูกค้า ↔ ไรเดอร์)
+      </p>
+      <div
+        ref={scrollRef}
+        className="max-h-[220px] overflow-y-auto space-y-2 mb-2 px-0.5"
+      >
+        {messages.length === 0 && (
+          <p className="text-[11px] text-gray-400 text-center py-2">
+            ยังไม่มีข้อความในห้องนี้
+          </p>
+        )}
+        {messages.map((m) => {
+          const role = m.senderRole;
+          const colorCls =
+            role === "customer"
+              ? "bg-orange-100 text-orange-900"
+              : role === "rider"
+                ? "bg-gray-100 text-gray-800"
+                : role === "admin"
+                  ? "bg-amber-100 text-amber-900"
+                  : "bg-blue-50 text-blue-800";
+          const label =
+            role === "customer" ? "ลูกค้า"
+            : role === "rider" ? "ไรเดอร์"
+            : role === "admin" ? "แอดมิน"
+            : "ระบบ";
+          return (
+            <div key={m.id} className={`rounded-lg px-2.5 py-1.5 text-[12px] ${colorCls}`}>
+              <p className="text-[10px] opacity-75 mb-0.5">
+                {label}{m.senderName ? ` · ${m.senderName}` : ""}
+                {" · "}
+                {new Date(m.createdAt).toLocaleString("th-TH", {
+                  hour: "2-digit", minute: "2-digit", day: "numeric", month: "short",
+                })}
+              </p>
+              <p className="whitespace-pre-wrap break-words">{m.content}</p>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="flex items-end gap-1.5">
+        <textarea
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              handleSend();
+            }
+          }}
+          rows={1}
+          placeholder="ส่งข้อความในฐานะแอดมิน..."
+          className="flex-1 rounded-full border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300 resize-none"
+        />
+        <button
+          type="button"
+          onClick={handleSend}
+          disabled={!draft.trim() || sendMut.isPending}
+          className="w-9 h-9 rounded-full bg-amber-500 text-white flex items-center justify-center disabled:opacity-40 flex-shrink-0"
+          aria-label="ส่งข้อความ"
+        >
+          <Send size={14} />
+        </button>
+      </div>
+    </section>
   );
 }
