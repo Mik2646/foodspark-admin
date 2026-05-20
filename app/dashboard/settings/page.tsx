@@ -1789,7 +1789,150 @@ export default function SettingsPage() {
       <HomePromoBannerCard />
       <DeliverySettings />
       <TransportPricingCard />
+      <InspectionPricingCard />
       <PromoSection />
     </div>
+  );
+}
+
+/**
+ * InspectionPricingCard — formulas behind the ตรวจสภาพ-พรบ. service.
+ * Sets FoodSpark labor (base + per-extra service) + per-service
+ * government fee estimates (per vehicle type) used by the booking
+ * preview. Final govt fees are entered by admin at completion time.
+ */
+function InspectionPricingCard() {
+  const utils = trpc.useUtils();
+  const { data: settingsRaw } = trpc.admin.getSettings.useQuery();
+  const updateSettings = trpc.admin.updateSettings.useMutation({
+    onSuccess: async () => {
+      await utils.admin.getSettings.invalidate();
+      setNotice({ type: "success", message: "บันทึกแล้ว" });
+      setTimeout(() => setNotice(null), 2400);
+    },
+    onError: (e) => setNotice({ type: "error", message: e.message }),
+  });
+  const s = (settingsRaw || {}) as Record<string, string>;
+
+  const [enabled, setEnabled] = useState<boolean>(true);
+  const [base, setBase] = useState("200");
+  const [perExtra, setPerExtra] = useState("50");
+  const [carInsp, setCarInsp] = useState("500");
+  const [carCom, setCarCom] = useState("700");
+  const [carTax, setCarTax] = useState("1000");
+  const [mcInsp, setMcInsp] = useState("60");
+  const [mcCom, setMcCom] = useState("400");
+  const [mcTax, setMcTax] = useState("100");
+  const [notice, setNotice] = useState<{ type: "success" | "error"; message: string } | null>(null);
+
+  useEffect(() => {
+    setEnabled(s.inspection_enabled !== "false");
+    setBase(s.inspection_base_service_fee ?? "200");
+    setPerExtra(s.inspection_per_extra_service_fee ?? "50");
+    setCarInsp(s.inspection_est_car_inspection ?? "500");
+    setCarCom(s.inspection_est_car_compulsory ?? "700");
+    setCarTax(s.inspection_est_car_tax ?? "1000");
+    setMcInsp(s.inspection_est_motorcycle_inspection ?? "60");
+    setMcCom(s.inspection_est_motorcycle_compulsory ?? "400");
+    setMcTax(s.inspection_est_motorcycle_tax ?? "100");
+  }, [
+    s.inspection_enabled,
+    s.inspection_base_service_fee, s.inspection_per_extra_service_fee,
+    s.inspection_est_car_inspection, s.inspection_est_car_compulsory, s.inspection_est_car_tax,
+    s.inspection_est_motorcycle_inspection, s.inspection_est_motorcycle_compulsory, s.inspection_est_motorcycle_tax,
+  ]);
+
+  const save = async () => {
+    await updateSettings.mutateAsync({
+      inspection_enabled: enabled ? "true" : "false",
+      inspection_base_service_fee: base.trim() || "0",
+      inspection_per_extra_service_fee: perExtra.trim() || "0",
+      inspection_est_car_inspection: carInsp.trim() || "0",
+      inspection_est_car_compulsory: carCom.trim() || "0",
+      inspection_est_car_tax: carTax.trim() || "0",
+      inspection_est_motorcycle_inspection: mcInsp.trim() || "0",
+      inspection_est_motorcycle_compulsory: mcCom.trim() || "0",
+      inspection_est_motorcycle_tax: mcTax.trim() || "0",
+    });
+  };
+
+  return (
+    <section className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 mb-6">
+      <div className="mb-5 flex items-start gap-3">
+        <div className="w-10 h-10 rounded-xl bg-violet-50 text-violet-600 flex items-center justify-center flex-shrink-0">
+          <Wrench className="w-5 h-5" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <h2 className="text-lg font-bold text-gray-900">ราคาบริการตรวจสภาพ-พรบ.</h2>
+          <p className="text-xs text-gray-400 mt-1">
+            สูตรคิดค่าบริการ FoodSpark + ประมาณการค่าราชการที่แสดงในหน้าจองให้ลูกค้า
+            (ค่าจริงกรอกตอนปิดออเดอร์)
+          </p>
+        </div>
+      </div>
+
+      {notice && (
+        <div className={`mb-4 rounded-lg px-3 py-2 text-sm ${notice.type === "success" ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}`}>
+          {notice.message}
+        </div>
+      )}
+
+      <label className="flex items-center gap-3 mb-5 cursor-pointer">
+        <span className="relative inline-flex items-center">
+          <input
+            type="checkbox"
+            checked={enabled}
+            onChange={(e) => setEnabled(e.target.checked)}
+            className="sr-only peer"
+          />
+          <span className="w-11 h-6 bg-gray-200 peer-checked:bg-violet-600 rounded-full transition-colors" />
+          <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${enabled ? "translate-x-5" : ""}`} />
+        </span>
+        <div>
+          <p className="text-sm font-semibold text-gray-900">
+            {enabled ? "เปิดให้บริการตรวจสภาพ-พรบ." : "ปิดบริการ (ลูกค้าจะกดสั่งไม่ได้)"}
+          </p>
+        </div>
+      </label>
+
+      <div className="rounded-xl border border-violet-100 bg-violet-50/30 p-4 mb-3">
+        <h3 className="text-sm font-bold text-violet-900 mb-3">ค่าบริการ FoodSpark</h3>
+        <div className="grid grid-cols-2 gap-3">
+          <NumField label="ค่าบริการเริ่มต้น (฿)" value={base} onChange={setBase} />
+          <NumField label="ค่าบริการเพิ่มต่อรายการ (฿)" value={perExtra} onChange={setPerExtra} />
+        </div>
+        <p className="mt-2 text-[11px] text-violet-700">
+          สูตร: ฿เริ่มต้น + (จำนวนบริการ − 1) × ฿เพิ่ม
+        </p>
+      </div>
+
+      <div className="rounded-xl border border-blue-100 bg-blue-50/30 p-4 mb-3">
+        <h3 className="text-sm font-bold text-blue-900 mb-3">ค่าราชการประมาณ — รถยนต์</h3>
+        <div className="grid grid-cols-3 gap-3">
+          <NumField label="ตรวจสภาพ (฿)" value={carInsp} onChange={setCarInsp} />
+          <NumField label="พรบ. (฿)" value={carCom} onChange={setCarCom} />
+          <NumField label="ภาษีประจำปี (฿)" value={carTax} onChange={setCarTax} />
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-emerald-100 bg-emerald-50/30 p-4">
+        <h3 className="text-sm font-bold text-emerald-900 mb-3">ค่าราชการประมาณ — มอเตอร์ไซค์</h3>
+        <div className="grid grid-cols-3 gap-3">
+          <NumField label="ตรวจสภาพ (฿)" value={mcInsp} onChange={setMcInsp} />
+          <NumField label="พรบ. (฿)" value={mcCom} onChange={setMcCom} />
+          <NumField label="ภาษีประจำปี (฿)" value={mcTax} onChange={setMcTax} />
+        </div>
+      </div>
+
+      <button
+        type="button"
+        onClick={save}
+        disabled={updateSettings.isPending}
+        className="mt-5 inline-flex items-center gap-2 rounded-lg bg-violet-600 text-white px-4 py-2.5 text-sm font-semibold disabled:opacity-60"
+      >
+        {updateSettings.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+        {updateSettings.isPending ? "กำลังบันทึก..." : "บันทึกสูตรราคา"}
+      </button>
+    </section>
   );
 }
