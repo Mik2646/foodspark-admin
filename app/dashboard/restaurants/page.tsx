@@ -1,8 +1,8 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { trpc } from "@/lib/trpc";
-import { CheckCircle, XCircle, ToggleLeft, ToggleRight, Pencil, Trash2 } from "lucide-react";
+import { CheckCircle, XCircle, ToggleLeft, ToggleRight, Pencil, Trash2, Plus, Loader2, X } from "lucide-react";
 
 export default function RestaurantsPage() {
   const { data: restaurants = [], isLoading, refetch } = trpc.admin.listRestaurants.useQuery();
@@ -15,6 +15,7 @@ export default function RestaurantsPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkConfirm, setBulkConfirm] = useState(false);
+  const [showCreate, setShowCreate] = useState(false);
   const deleteRestaurants = trpc.admin.deleteRestaurants.useMutation({
     onSuccess: (res: any) => {
       setBulkConfirm(false);
@@ -103,10 +104,31 @@ export default function RestaurantsPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">จัดการร้านอาหาร</h1>
-        <span className="text-sm text-gray-400">{restaurants.length} ร้าน</span>
+      <div className="flex items-center justify-between mb-6 gap-3 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">จัดการร้านอาหาร</h1>
+          <p className="text-xs text-gray-400 mt-1">{restaurants.length} ร้านในระบบ</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setShowCreate(true)}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-orange-500 hover:bg-orange-600 text-white px-3 py-2 text-sm font-semibold"
+        >
+          <Plus className="w-4 h-4" /> สร้างร้านให้ผู้ใช้
+        </button>
       </div>
+
+      {showCreate && (
+        <CreateRestaurantForOwnerModal
+          users={users}
+          existingRestaurants={restaurants as Array<{ ownerId?: number | null }>}
+          onClose={() => setShowCreate(false)}
+          onCreated={() => {
+            setShowCreate(false);
+            refetch();
+          }}
+        />
+      )}
 
       {selected.size > 0 && (
         <div className="flex items-center justify-between mb-3 px-4 py-2.5 bg-orange-50 border border-orange-200 rounded-xl">
@@ -322,6 +344,199 @@ function RestaurantTypeBadges({ r }: { r: Record<string, unknown> }) {
           + รับที่ร้าน
         </span>
       )}
+    </div>
+  );
+}
+
+/**
+ * CreateRestaurantForOwnerModal — admin spawns a restaurant row on
+ * behalf of an approved merchant who hasn't completed the setup
+ * form themselves. The picker only lists merchants without an
+ * existing restaurant (one-shop-per-merchant constraint).
+ */
+function CreateRestaurantForOwnerModal({
+  users,
+  existingRestaurants,
+  onClose,
+  onCreated,
+}: {
+  users: Array<{
+    id: number;
+    name?: string | null;
+    email?: string | null;
+    role?: string | null;
+    merchantApprovalStatus?: string | null;
+  }>;
+  existingRestaurants: Array<{ ownerId?: number | null }>;
+  onClose: () => void;
+  onCreated: () => void;
+}) {
+  const create = trpc.admin.createRestaurantForOwner.useMutation({
+    onSuccess: () => onCreated(),
+    onError: (e) => setError(e.message),
+  });
+
+  const [error, setError] = useState<string | null>(null);
+  const [ownerId, setOwnerId] = useState<number | null>(null);
+  const [restaurantName, setRestaurantName] = useState("");
+  const [restaurantCategory, setRestaurantCategory] = useState("");
+  const [restaurantAddress, setRestaurantAddress] = useState("");
+  const [deliveryTime, setDeliveryTime] = useState("30-45");
+  const [openOnCreate, setOpenOnCreate] = useState(false);
+
+  const eligibleOwners = useMemo(() => {
+    const taken = new Set(
+      existingRestaurants
+        .map((r) => r.ownerId)
+        .filter((id): id is number => typeof id === "number"),
+    );
+    return users
+      .filter((u) => u.role === "merchant" && u.merchantApprovalStatus === "approved" && !taken.has(u.id))
+      .sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
+  }, [users, existingRestaurants]);
+
+  const submit = () => {
+    if (!ownerId) {
+      setError("เลือกผู้ใช้ที่จะเป็นเจ้าของร้าน");
+      return;
+    }
+    if (!restaurantName.trim()) {
+      setError("กรอกชื่อร้าน");
+      return;
+    }
+    if (!restaurantCategory.trim()) {
+      setError("กรอกหมวดหมู่ร้าน");
+      return;
+    }
+    setError(null);
+    create.mutate({
+      ownerId,
+      restaurantName: restaurantName.trim(),
+      restaurantCategory: restaurantCategory.trim(),
+      restaurantAddress: restaurantAddress.trim() || undefined,
+      deliveryTime: deliveryTime.trim() || undefined,
+      openOnCreate,
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/45 p-3" onClick={onClose}>
+      <div
+        className="relative w-full max-w-lg max-h-[92vh] overflow-y-auto bg-white rounded-3xl shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="sticky top-0 z-10 bg-white border-b border-gray-100 px-5 py-3 flex items-center justify-between">
+          <h3 className="text-base font-extrabold text-gray-900 inline-flex items-center gap-1.5">
+            <Plus className="w-4 h-4 text-orange-500" /> สร้างร้านให้ผู้ใช้
+          </h3>
+          <button onClick={onClose} className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center">
+            <X size={14} />
+          </button>
+        </div>
+
+        <div className="p-5 space-y-3">
+          <p className="text-xs text-gray-500">
+            ใช้ตอนผู้ใช้ลงทะเบียนเป็นร้านค้าและอนุมัติเรียบร้อยแล้ว แต่ไม่ได้กรอกฟอร์ม
+            ตั้งร้านเอง ระบบจะสร้างให้ + เปิดให้แก้รายละเอียดต่อในหน้า /dashboard/restaurants/[id]
+          </p>
+
+          {error && (
+            <div className="rounded-lg bg-rose-50 border border-rose-200 px-3 py-2 text-sm text-rose-700">
+              {error}
+            </div>
+          )}
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 mb-1">เจ้าของร้าน (merchant ที่อนุมัติแล้ว)</label>
+            <select
+              value={ownerId ?? ""}
+              onChange={(e) => setOwnerId(e.target.value ? Number(e.target.value) : null)}
+              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300"
+            >
+              <option value="">— เลือกผู้ใช้ —</option>
+              {eligibleOwners.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.name ?? "(ไม่มีชื่อ)"} · #{u.id}
+                </option>
+              ))}
+            </select>
+            <p className="text-[11px] text-gray-400 mt-1">
+              {eligibleOwners.length} ผู้ใช้ที่ยังไม่มีร้าน · ผู้ที่มีร้านแล้วถูกตัดออก
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 mb-1">ชื่อร้าน</label>
+            <input
+              type="text"
+              value={restaurantName}
+              onChange={(e) => setRestaurantName(e.target.value)}
+              maxLength={128}
+              placeholder="เช่น ครัวคุณป้า"
+              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 mb-1">หมวดหมู่</label>
+            <input
+              type="text"
+              value={restaurantCategory}
+              onChange={(e) => setRestaurantCategory(e.target.value)}
+              maxLength={64}
+              placeholder="เช่น อาหารตามสั่ง, ก๋วยเตี๋ยว, เครื่องดื่ม"
+              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 mb-1">ที่อยู่ร้าน (ไม่บังคับ)</label>
+            <textarea
+              value={restaurantAddress}
+              onChange={(e) => setRestaurantAddress(e.target.value)}
+              rows={2}
+              maxLength={500}
+              placeholder="เลขที่ ถนน ตำบล อำเภอ จังหวัด"
+              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300 resize-none"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 mb-1">เวลาทำอาหารโดยประมาณ (นาที)</label>
+            <input
+              type="text"
+              value={deliveryTime}
+              onChange={(e) => setDeliveryTime(e.target.value)}
+              maxLength={32}
+              placeholder="30-45"
+              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300"
+            />
+          </div>
+
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={openOnCreate}
+              onChange={(e) => setOpenOnCreate(e.target.checked)}
+              className="w-4 h-4 rounded border-gray-300 text-orange-500 focus:ring-orange-400"
+            />
+            <span className="text-sm text-gray-700">เปิดร้านทันทีหลังสร้าง</span>
+          </label>
+          <p className="text-[11px] text-gray-400 -mt-1">
+            ปกติเปิดให้ร้านเข้าไปแก้รายละเอียด + ตั้งเมนูก่อน แล้วค่อยเปิดเอง
+          </p>
+
+          <button
+            type="button"
+            onClick={submit}
+            disabled={create.isPending}
+            className="mt-3 w-full inline-flex items-center justify-center gap-1.5 rounded-lg bg-orange-500 hover:bg-orange-600 text-white py-2.5 text-sm font-bold disabled:opacity-60"
+          >
+            {create.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+            {create.isPending ? "กำลังสร้าง..." : "สร้างร้านให้"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
