@@ -181,6 +181,7 @@ export default function RestaurantsPage() {
                     <Link href={`/dashboard/restaurants/${r.id}`} className="hover:text-orange-500 hover:underline transition-colors">
                       {r.name}
                     </Link>
+                    <RestaurantTypeBadges r={r} />
                   </td>
                   <td className="px-4 py-3 text-gray-500">{r.category ?? "—"}</td>
                   <td className="px-4 py-3">
@@ -284,6 +285,42 @@ export default function RestaurantsPage() {
             </div>
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Phase 5+ — type pills derived from the unified restaurant type
+ * flags. A row can only be ONE of regular/market/preorder (the type
+ * picker enforces this server-side), but pickup is orthogonal — a
+ * regular shop or a preorder shop can both also accept walk-in
+ * pickup.
+ */
+function RestaurantTypeBadges({ r }: { r: Record<string, unknown> }) {
+  const isMarket = Boolean(r.isMarketVendor) || r.marketId != null;
+  const isPreorder = Boolean(r.acceptsPreorder);
+  const isPickup = Boolean(r.acceptsPickup);
+  const type: "regular" | "market" | "preorder" = isMarket
+    ? "market"
+    : isPreorder
+      ? "preorder"
+      : "regular";
+
+  const typeMeta: Record<typeof type, { label: string; cls: string }> = {
+    regular: { label: "ปกติ", cls: "bg-orange-50 text-orange-700 border-orange-200" },
+    market: { label: "ตลาดนัด", cls: "bg-emerald-50 text-emerald-700 border-emerald-200" },
+    preorder: { label: "พรีออเดอร์", cls: "bg-amber-50 text-amber-700 border-amber-200" },
+  };
+  return (
+    <div className="mt-1 flex flex-wrap gap-1">
+      <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold border ${typeMeta[type].cls}`}>
+        {typeMeta[type].label}
+      </span>
+      {isPickup && (
+        <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold border bg-blue-50 text-blue-700 border-blue-200">
+          + รับที่ร้าน
+        </span>
       )}
     </div>
   );
