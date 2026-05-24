@@ -3,8 +3,8 @@ import { use } from "react";
 import Link from "next/link";
 import { trpc } from "@/lib/trpc";
 import {
-  ArrowLeft, Wifi, WifiOff, Phone, Mail, MapPin, Bike, Car,
-  Star, TrendingUp, Package, Wallet, Calendar, Clock, CheckCircle2, XCircle,
+  ArrowLeft, WifiOff, Phone, Mail, MapPin, Bike, Car,
+  Star, TrendingUp, Package, Calendar, Clock, CheckCircle2, XCircle,
 } from "lucide-react";
 
 const STATUS_LABELS: Record<string, string> = {
@@ -52,7 +52,9 @@ export default function RiderDetailPage({ params }: { params: Promise<{ id: stri
   }
   if (!data) return null;
 
-  const { rider, metrics, orders, topups, activeOrder } = data as any;
+  // Backend still returns `topups` until the cash-only cleanup ships;
+  // the UI ignores them now that wallet is gone.
+  const { rider, metrics, orders, activeOrder } = data as any;
 
   const approvalBadge = (() => {
     const s = rider.riderApprovalStatus;
@@ -118,13 +120,6 @@ export default function RiderDetailPage({ params }: { params: Promise<{ id: stri
           label="เรตติ้งเฉลี่ย"
           value={metrics.avgRating ? metrics.avgRating.toFixed(2) : "—"}
           sub={metrics.ratingCount > 0 ? `จาก ${metrics.ratingCount} รีวิว` : "ยังไม่มีรีวิว"}
-        />
-        <KpiCard
-          icon={<Wallet className="w-5 h-5" />}
-          color="blue"
-          label="ยอด wallet ไรเดอร์"
-          value={`฿${(rider.riderWalletBalance ?? 0).toLocaleString()}`}
-          sub={`อัปเดต ${formatThaiDateTime(rider.riderWalletUpdatedAt)}`}
         />
       </div>
 
@@ -197,48 +192,6 @@ export default function RiderDetailPage({ params }: { params: Promise<{ id: stri
         </div>
       </div>
 
-      {/* Topups table */}
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-        <div className="px-5 py-3 border-b border-gray-100">
-          <h2 className="text-sm font-semibold text-gray-700">ประวัติเติม wallet ไรเดอร์</h2>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-100 bg-gray-50/50 text-xs text-gray-500">
-                <th className="text-left px-5 py-2.5 font-medium">#</th>
-                <th className="text-left px-4 py-2.5 font-medium">จำนวน</th>
-                <th className="text-left px-4 py-2.5 font-medium">สถานะ</th>
-                <th className="text-left px-4 py-2.5 font-medium">หมายเหตุ</th>
-                <th className="text-left px-4 py-2.5 font-medium">วันที่</th>
-              </tr>
-            </thead>
-            <tbody>
-              {topups.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-gray-400">ยังไม่มีการเติม wallet</td>
-                </tr>
-              ) : topups.map((t: any) => (
-                <tr key={t.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
-                  <td className="px-5 py-3 text-gray-400 font-mono text-xs">{t.id}</td>
-                  <td className="px-4 py-3 font-medium text-green-600">฿{Number(t.amount).toLocaleString()}</td>
-                  <td className="px-4 py-3">
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                      t.status === "approved" ? "bg-green-100 text-green-700"
-                        : t.status === "rejected" ? "bg-red-100 text-red-600"
-                        : "bg-yellow-100 text-yellow-700"
-                    }`}>
-                      {t.status === "approved" ? "อนุมัติ" : t.status === "rejected" ? "ปฏิเสธ" : "รอยืนยัน"}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-gray-500 max-w-[280px] truncate">{t.adminNote ?? "—"}</td>
-                  <td className="px-4 py-3 text-gray-400 text-xs whitespace-nowrap">{formatThaiDateTime(t.createdAt)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
     </div>
   );
 }

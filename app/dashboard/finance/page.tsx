@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { trpc } from "@/lib/trpc";
-import { BanknoteArrowDown, CheckCircle2, Download, RefreshCcw, XCircle } from "lucide-react";
+import { BanknoteArrowDown, Download, RefreshCcw } from "lucide-react";
 
 function formatThaiDateTime(value: string | Date | null | undefined) {
   if (!value) return "-";
@@ -35,18 +35,12 @@ export default function FinancePage() {
   const utils = trpc.useUtils();
   const [days, setDays] = useState(30);
   const [payoutStatus, setPayoutStatus] = useState<"pending" | "paid" | "rejected" | "all">("pending");
-  const [topupStatus, setTopupStatus] = useState<"pending" | "approved" | "rejected" | "all">("pending");
-  const [customerTopupStatus, setCustomerTopupStatus] = useState<"pending" | "approved" | "rejected" | "all">("pending");
   const [note, setNote] = useState("");
-  const [topupNoteMap, setTopupNoteMap] = useState<Record<number, string>>({});
-  const [customerTopupNoteMap, setCustomerTopupNoteMap] = useState<Record<number, string>>({});
   const [notice, setNotice] = useState<string | null>(null);
 
   const settlement = trpc.admin.financeSettlement.useQuery({ days });
   const payoutOverview = trpc.payout.adminOverview.useQuery();
   const payoutList = trpc.payout.adminList.useQuery({ status: payoutStatus }, { refetchInterval: 15000 });
-  const topupList = trpc.payout.adminTopupList.useQuery({ status: topupStatus }, { refetchInterval: 15000 });
-  const customerTopupList = trpc.payout.listCustomerTopups.useQuery({ status: customerTopupStatus }, { refetchInterval: 15000 });
 
   const markPaid = trpc.payout.adminMarkPaid.useMutation({
     onSuccess: async () => {
@@ -66,62 +60,10 @@ export default function FinancePage() {
     },
   });
 
-  const approveTopup = trpc.payout.adminApproveTopup.useMutation({
-    onSuccess: async () => {
-      await utils.payout.adminTopupList.invalidate();
-      await utils.payout.adminOverview.invalidate();
-      setNotice("อนุมัติเติมเงินไรเดอร์แล้ว");
-      setTimeout(() => setNotice(null), 1800);
-    },
-  });
-
-  const rejectTopup = trpc.payout.adminRejectTopup.useMutation({
-    onSuccess: async () => {
-      await utils.payout.adminTopupList.invalidate();
-      await utils.payout.adminOverview.invalidate();
-      setNotice("ปฏิเสธรายการเติมเงินแล้ว");
-      setTimeout(() => setNotice(null), 1800);
-    },
-  });
-
-  const approveCustomerTopup = trpc.payout.adminApproveCustomerTopup.useMutation({
-    onSuccess: async () => {
-      await utils.payout.listCustomerTopups.invalidate();
-      setNotice("อนุมัติเติมเงินลูกค้าแล้ว");
-      setTimeout(() => setNotice(null), 1800);
-    },
-  });
-
-  const rejectCustomerTopup = trpc.payout.adminRejectCustomerTopup.useMutation({
-    onSuccess: async () => {
-      await utils.payout.listCustomerTopups.invalidate();
-      setNotice("ปฏิเสธรายการเติมเงินลูกค้าแล้ว");
-      setTimeout(() => setNotice(null), 1800);
-    },
-  });
 
   const pendingCount = useMemo(
     () => (payoutList.data || []).filter((p) => p.status === "pending").length,
     [payoutList.data],
-  );
-  const pendingTopupCount = useMemo(
-    () => (topupList.data || []).filter((t) => t.status === "pending").length,
-    [topupList.data],
-  );
-  const pendingTopupAmount = useMemo(
-    () => (topupList.data || []).filter((t) => t.status === "pending").reduce((sum, t) => sum + t.amount, 0),
-    [topupList.data],
-  );
-  const pendingCustomerTopupCount = useMemo(
-    () => (customerTopupList.data || []).filter((t: { status: string }) => t.status === "pending").length,
-    [customerTopupList.data],
-  );
-  const pendingCustomerTopupAmount = useMemo(
-    () =>
-      (customerTopupList.data || [])
-        .filter((t: { status: string }) => t.status === "pending")
-        .reduce((sum: number, t: { amount: number }) => sum + t.amount, 0),
-    [customerTopupList.data],
   );
 
   return (
@@ -138,7 +80,6 @@ export default function FinancePage() {
             settlement.refetch();
             payoutOverview.refetch();
             payoutList.refetch();
-            topupList.refetch();
           }}
           className="inline-flex items-center gap-1.5 px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50"
         >
@@ -147,9 +88,9 @@ export default function FinancePage() {
       </div>
 
       {notice && <div className="mb-4 rounded-lg bg-green-50 border border-green-100 text-green-700 text-sm px-3 py-2">{notice}</div>}
-      {(settlement.error || payoutOverview.error || payoutList.error || topupList.error) && (
+      {(settlement.error || payoutOverview.error || payoutList.error) && (
         <div className="mb-4 rounded-lg bg-red-50 border border-red-100 text-red-700 text-sm px-3 py-2">
-          {settlement.error?.message || payoutOverview.error?.message || payoutList.error?.message || topupList.error?.message}
+          {settlement.error?.message || payoutOverview.error?.message || payoutList.error?.message}
         </div>
       )}
 
@@ -161,269 +102,6 @@ export default function FinancePage() {
         <div className="rounded-xl border border-amber-100 bg-amber-50 p-3"><div className="text-xs text-amber-600">ถอนเงินค้างจ่าย</div><div className="text-xl font-bold text-amber-700">฿{payoutOverview.data?.pendingPayouts?.toLocaleString() ?? 0}</div></div>
       </div>
 
-      <div className="bg-white rounded-2xl border border-orange-100 shadow-sm p-4 mb-5">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between mb-3">
-          <div>
-            <h2 className="text-sm font-semibold text-gray-800">เติมเงินไรเดอร์รอตรวจ</h2>
-            <p className="text-xs text-gray-500 mt-0.5">
-              ไรเดอร์ต้องโอนเงินจริงและส่งสลิป รายการจะเพิ่มยอดกระเป๋าได้หลังแอดมินอนุมัติเท่านั้น
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <select
-              value={topupStatus}
-              onChange={(e) => setTopupStatus(e.target.value as "pending" | "approved" | "rejected" | "all")}
-              className="rounded-lg border border-gray-200 px-2 py-1.5 text-xs"
-            >
-              <option value="pending">pending</option>
-              <option value="approved">approved</option>
-              <option value="rejected">rejected</option>
-              <option value="all">all</option>
-            </select>
-            <span className="rounded-full bg-orange-50 px-2.5 py-1 text-xs font-semibold text-orange-700">
-              ค้าง: {pendingTopupCount} / ฿{pendingTopupAmount.toLocaleString()}
-            </span>
-          </div>
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[980px] text-sm">
-            <thead>
-              <tr className="border-b border-gray-100">
-                <th className="text-left py-2 text-xs text-gray-500">ID</th>
-                <th className="text-left py-2 text-xs text-gray-500">ไรเดอร์</th>
-                <th className="text-left py-2 text-xs text-gray-500">ยอด</th>
-                <th className="text-left py-2 text-xs text-gray-500">สลิป</th>
-                <th className="text-left py-2 text-xs text-gray-500">สถานะ</th>
-                <th className="text-left py-2 text-xs text-gray-500">เวลา</th>
-                <th className="text-left py-2 text-xs text-gray-500">หมายเหตุ</th>
-                <th className="text-right py-2 text-xs text-gray-500">จัดการ</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(topupList.data || []).map((row) => (
-                <tr key={row.id} className="border-b border-gray-50 align-top">
-                  <td className="py-3 font-mono text-xs text-gray-500">#{row.id}</td>
-                  <td className="py-3">
-                    <div className="font-medium text-gray-900">{row.riderName || `Rider #${row.riderId}`}</div>
-                    <div className="text-xs text-gray-500">{row.riderPhone || "-"}</div>
-                  </td>
-                  <td className="py-3 font-semibold text-orange-600">฿{row.amount.toLocaleString()}</td>
-                  <td className="py-3">
-                    {row.slipImage ? (
-                      <a
-                        href={row.slipImage}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center rounded-lg border border-gray-200 px-2.5 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50"
-                      >
-                        เปิดสลิป
-                      </a>
-                    ) : (
-                      <span className="text-xs text-red-500">ไม่มีสลิป</span>
-                    )}
-                  </td>
-                  <td className="py-3">
-                    <span
-                      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${
-                        row.status === "approved"
-                          ? "bg-green-50 text-green-700"
-                          : row.status === "rejected"
-                            ? "bg-red-50 text-red-700"
-                            : "bg-amber-50 text-amber-700"
-                      }`}
-                    >
-                      {row.status}
-                    </span>
-                    {row.settledOrders > 0 && (
-                      <div className="mt-1 text-[11px] text-green-700">ปิดยอดค้าง {row.settledOrders} ออเดอร์</div>
-                    )}
-                  </td>
-                  <td className="py-3 text-xs text-gray-500">{formatThaiDateTime(row.createdAt)}</td>
-                  <td className="py-3">
-                    {row.status === "pending" ? (
-                      <input
-                        value={topupNoteMap[row.id] ?? ""}
-                        onChange={(e) => setTopupNoteMap((prev) => ({ ...prev, [row.id]: e.target.value }))}
-                        className="w-48 rounded-lg border border-gray-200 px-2 py-1.5 text-xs"
-                        placeholder="หมายเหตุ"
-                      />
-                    ) : (
-                      <span className="text-xs text-gray-500">{row.adminNote || "-"}</span>
-                    )}
-                  </td>
-                  <td className="py-3">
-                    <div className="flex items-center justify-end gap-2">
-                      <button
-                        onClick={() => approveTopup.mutate({ topupId: row.id, note: topupNoteMap[row.id]?.trim() || undefined })}
-                        disabled={row.status !== "pending" || approveTopup.isPending || rejectTopup.isPending}
-                        className="inline-flex items-center gap-1 rounded-lg bg-green-500 px-2.5 py-1 text-xs font-semibold text-white disabled:opacity-30"
-                      >
-                        <CheckCircle2 className="h-3.5 w-3.5" /> อนุมัติ
-                      </button>
-                      <button
-                        onClick={() => {
-                          const topupNote = topupNoteMap[row.id]?.trim();
-                          if (!topupNote) {
-                            setNotice("กรอกหมายเหตุก่อนปฏิเสธรายการเติมเงิน");
-                            setTimeout(() => setNotice(null), 1800);
-                            return;
-                          }
-                          rejectTopup.mutate({ topupId: row.id, note: topupNote });
-                        }}
-                        disabled={row.status !== "pending" || approveTopup.isPending || rejectTopup.isPending}
-                        className="inline-flex items-center gap-1 rounded-lg bg-red-500 px-2.5 py-1 text-xs font-semibold text-white disabled:opacity-30"
-                      >
-                        <XCircle className="h-3.5 w-3.5" /> ปฏิเสธ
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {topupList.isLoading && <div className="py-8 text-center text-sm text-gray-400">กำลังโหลดรายการเติมเงิน...</div>}
-          {!topupList.isLoading && topupList.data?.length === 0 && (
-            <div className="py-8 text-center text-sm text-gray-400">ไม่มีรายการเติมเงินไรเดอร์</div>
-          )}
-        </div>
-
-        {/* ── Customer wallet topups ── */}
-        <div className="mt-8 pt-6 border-t border-gray-100">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between mb-3">
-            <div>
-              <h2 className="text-sm font-semibold text-gray-800">เติมเงินกระเป๋าลูกค้ารอตรวจ</h2>
-              <p className="text-xs text-gray-500 mt-0.5">
-                ลูกค้าโอนเงินผ่านพร้อมเพย์และส่งสลิป — ยอดกระเป๋าจะถูกเครดิตหลังอนุมัติเท่านั้น
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <select
-                value={customerTopupStatus}
-                onChange={(e) => setCustomerTopupStatus(e.target.value as "pending" | "approved" | "rejected" | "all")}
-                className="rounded-lg border border-gray-200 px-2 py-1.5 text-xs"
-              >
-                <option value="pending">pending</option>
-                <option value="approved">approved</option>
-                <option value="rejected">rejected</option>
-                <option value="all">all</option>
-              </select>
-              <span className="rounded-full bg-orange-50 px-2.5 py-1 text-xs font-semibold text-orange-700">
-                ค้าง: {pendingCustomerTopupCount} / ฿{pendingCustomerTopupAmount.toLocaleString()}
-              </span>
-            </div>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[980px] text-sm">
-              <thead>
-                <tr className="border-b border-gray-100">
-                  <th className="text-left py-2 text-xs text-gray-500">ID</th>
-                  <th className="text-left py-2 text-xs text-gray-500">ลูกค้า</th>
-                  <th className="text-left py-2 text-xs text-gray-500">ยอด</th>
-                  <th className="text-left py-2 text-xs text-gray-500">สลิป</th>
-                  <th className="text-left py-2 text-xs text-gray-500">สถานะ</th>
-                  <th className="text-left py-2 text-xs text-gray-500">เวลา</th>
-                  <th className="text-left py-2 text-xs text-gray-500">หมายเหตุ</th>
-                  <th className="text-right py-2 text-xs text-gray-500">จัดการ</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(customerTopupList.data || []).map((row: {
-                  id: number;
-                  userId: number;
-                  customerName: string | null;
-                  customerPhone: string | null;
-                  amount: number;
-                  status: string;
-                  slipImage: string | null;
-                  adminNote: string | null;
-                  createdAt: string | Date;
-                }) => (
-                  <tr key={row.id} className="border-b border-gray-50 align-top">
-                    <td className="py-3 font-mono text-xs text-gray-500">#{row.id}</td>
-                    <td className="py-3">
-                      <div className="font-medium text-gray-900">{row.customerName || `User #${row.userId}`}</div>
-                      <div className="text-xs text-gray-500">{row.customerPhone || "-"}</div>
-                    </td>
-                    <td className="py-3 font-semibold text-orange-600">฿{row.amount.toLocaleString()}</td>
-                    <td className="py-3">
-                      {row.slipImage ? (
-                        <a
-                          href={row.slipImage}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center rounded-lg border border-gray-200 px-2.5 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50"
-                        >
-                          เปิดสลิป
-                        </a>
-                      ) : (
-                        <span className="text-xs text-red-500">ไม่มีสลิป</span>
-                      )}
-                    </td>
-                    <td className="py-3">
-                      <span
-                        className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${
-                          row.status === "approved"
-                            ? "bg-green-50 text-green-700"
-                            : row.status === "rejected"
-                              ? "bg-red-50 text-red-700"
-                              : "bg-amber-50 text-amber-700"
-                        }`}
-                      >
-                        {row.status}
-                      </span>
-                    </td>
-                    <td className="py-3 text-xs text-gray-500">{formatThaiDateTime(row.createdAt)}</td>
-                    <td className="py-3">
-                      {row.status === "pending" ? (
-                        <input
-                          value={customerTopupNoteMap[row.id] ?? ""}
-                          onChange={(e) => setCustomerTopupNoteMap((prev) => ({ ...prev, [row.id]: e.target.value }))}
-                          className="w-48 rounded-lg border border-gray-200 px-2 py-1.5 text-xs"
-                          placeholder="หมายเหตุ"
-                        />
-                      ) : (
-                        <span className="text-xs text-gray-500">{row.adminNote || "-"}</span>
-                      )}
-                    </td>
-                    <td className="py-3">
-                      <div className="flex items-center justify-end gap-2">
-                        <button
-                          onClick={() => approveCustomerTopup.mutate({ topupId: row.id, note: customerTopupNoteMap[row.id]?.trim() || undefined })}
-                          disabled={row.status !== "pending" || approveCustomerTopup.isPending || rejectCustomerTopup.isPending}
-                          className="inline-flex items-center gap-1 rounded-lg bg-green-500 px-2.5 py-1 text-xs font-semibold text-white disabled:opacity-30"
-                        >
-                          <CheckCircle2 className="h-3.5 w-3.5" /> อนุมัติ
-                        </button>
-                        <button
-                          onClick={() => {
-                            const customerNote = customerTopupNoteMap[row.id]?.trim();
-                            if (!customerNote) {
-                              setNotice("กรอกหมายเหตุก่อนปฏิเสธรายการเติมเงิน");
-                              setTimeout(() => setNotice(null), 1800);
-                              return;
-                            }
-                            rejectCustomerTopup.mutate({ topupId: row.id, note: customerNote });
-                          }}
-                          disabled={row.status !== "pending" || approveCustomerTopup.isPending || rejectCustomerTopup.isPending}
-                          className="inline-flex items-center gap-1 rounded-lg bg-red-500 px-2.5 py-1 text-xs font-semibold text-white disabled:opacity-30"
-                        >
-                          <XCircle className="h-3.5 w-3.5" /> ปฏิเสธ
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {customerTopupList.isLoading && <div className="py-8 text-center text-sm text-gray-400">กำลังโหลดรายการเติมเงินลูกค้า...</div>}
-            {!customerTopupList.isLoading && (customerTopupList.data?.length ?? 0) === 0 && (
-              <div className="py-8 text-center text-sm text-gray-400">ไม่มีรายการเติมเงินลูกค้า</div>
-            )}
-          </div>
-        </div>
-      </div>
 
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 mb-5">
         <div className="flex items-center justify-between mb-3">

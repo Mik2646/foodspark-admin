@@ -40,10 +40,11 @@ const STATUS_COLORS: Record<string, string> = {
   cancelled: "bg-red-100 text-red-600",
 };
 
+// Cash-only — PromptPay + Wallet payment options removed. Legacy
+// orders may still carry non-cash methods, so the renderer falls back
+// to the raw value when it's not in the map.
 const PAYMENT_LABELS: Record<string, string> = {
   cash: "เงินสด",
-  promptpay: "PromptPay",
-  wallet: "Wallet",
 };
 
 export default function OrdersPage() {
@@ -365,7 +366,7 @@ function OrderDetailModal({
   const [cancelPanelOpen, setCancelPanelOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
   const [cancelResult, setCancelResult] = useState<
-    | { ok: true; refundAmount: number; refundedToWallet: boolean }
+    | { ok: true; refundAmount?: number; refundedToWallet?: boolean }
     | null
   >(null);
   const cancelOrder = trpc.admin.cancelOrderWithReason.useMutation({
@@ -470,21 +471,14 @@ function OrderDetailModal({
                     <Bike className="w-3 h-3" /> เดลิเวอรี
                   </span>
                 )}
+                {/* Payment — cash-only platform. Legacy non-cash methods
+                    fall through to the raw value so admin can still ID them. */}
                 <span className="inline-flex items-center gap-1 text-xs font-bold text-blue-700 bg-blue-50 px-2.5 py-1 rounded-full">
                   <CreditCard className="w-3 h-3" />
-                  {PAYMENT_LABELS[o.paymentMethod] ?? o.paymentMethod}
+                  {!o.paymentMethod || o.paymentMethod === "cash"
+                    ? "เงินสด"
+                    : (PAYMENT_LABELS[o.paymentMethod] ?? o.paymentMethod)}
                 </span>
-                {o.paymentStatus && (
-                  <span
-                    className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                      o.paymentStatus === "paid"
-                        ? "bg-green-100 text-green-700"
-                        : "bg-amber-100 text-amber-700"
-                    }`}
-                  >
-                    {o.paymentStatus === "paid" ? "จ่ายแล้ว" : "ค้างจ่าย"}
-                  </span>
-                )}
               </div>
 
               {/* Customer */}
@@ -656,12 +650,6 @@ function OrderDetailModal({
                     <span className="tabular-nums">−฿{(o.promoDiscount ?? 0).toLocaleString()}</span>
                   </div>
                 )}
-                {(o.walletRedeemAmount ?? 0) > 0 && (
-                  <div className="flex justify-between text-emerald-700">
-                    <span>หักจาก wallet</span>
-                    <span className="tabular-nums">−฿{(o.walletRedeemAmount ?? 0).toLocaleString()}</span>
-                  </div>
-                )}
                 <div className="flex justify-between pt-2 mt-1 border-t border-orange-200 text-base font-extrabold text-gray-900">
                   <span>ยอดรวม</span>
                   <span className="text-orange-600 tabular-nums">
@@ -690,11 +678,6 @@ function OrderDetailModal({
                       </p>
                       <p className="text-xs text-red-700 leading-relaxed">
                         เลือกเหตุผลที่ใช้บ่อย หรือพิมพ์เหตุผลเองด้านล่าง — ลูกค้าจะได้รับการแจ้งเตือนพร้อมเหตุผล
-                        {o.paymentMethod === "wallet" || (o.walletRedeemAmount ?? 0) > 0
-                          ? " และเงินจะคืนเข้ากระเป๋าทันที"
-                          : o.paymentMethod === "promptpay"
-                            ? " ส่วนเงินที่จ่ายผ่าน PromptPay แอดมินคืนเองภายหลัง"
-                            : ""}
                       </p>
                       <div className="flex flex-wrap gap-1.5">
                         {CANCEL_REASON_PRESETS.map((preset) => (
@@ -764,9 +747,7 @@ function OrderDetailModal({
                         ยกเลิกสำเร็จ + แจ้งลูกค้าทาง LINE แล้ว
                       </p>
                       <p className="text-xs text-green-700 mt-1">
-                        {cancelResult.refundedToWallet
-                          ? `คืน ฿${cancelResult.refundAmount.toLocaleString()} เข้ากระเป๋าลูกค้าเรียบร้อย`
-                          : "ไม่มีการคืนเงินอัตโนมัติ (จ่ายปลายทาง / PromptPay รอแอดมินคืนเอง)"}
+                        ไม่มีการคืนเงิน (จ่ายเงินสดปลายทาง)
                       </p>
                     </div>
                   </div>

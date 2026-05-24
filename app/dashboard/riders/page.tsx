@@ -222,7 +222,6 @@ export default function RidersPage() {
             </h2>
             <p className="text-sm text-gray-500 mb-4">
               ลบถาวร — ออเดอร์เดิมที่ไรเดอร์เคยส่งจะยังอยู่ แต่ช่อง "ไรเดอร์" ในออเดอร์เก่าจะกลายเป็น "—"
-              ประวัติเติมเงิน wallet ของไรเดอร์จะถูกลบไปด้วย
             </p>
             <p className="text-xs text-gray-400 mb-5">
               ไรเดอร์ที่กำลังส่งของอยู่ในออเดอร์ active จะถูกข้ามไป

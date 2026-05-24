@@ -231,7 +231,7 @@ export default function UsersPage() {
               ลบผู้ใช้ {selected.size} คน?
             </h2>
             <p className="text-sm text-gray-500 mb-4">
-              ลบถาวร — รายการโปรด, ที่อยู่จัดส่ง, เติม wallet, ธุรกรรม wallet, สิทธิ์ admin ของผู้ใช้จะถูกลบ
+              ลบถาวร — รายการโปรด, ที่อยู่จัดส่ง, สิทธิ์ admin ของผู้ใช้จะถูกลบ
               ร้านอาหารที่ผู้ใช้เป็นเจ้าของจะคงอยู่แต่ช่อง "เจ้าของ" จะกลายเป็นว่าง
             </p>
             <p className="text-xs text-gray-400 mb-5">

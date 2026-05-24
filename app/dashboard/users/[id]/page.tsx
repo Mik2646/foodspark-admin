@@ -4,7 +4,7 @@ import Link from "next/link";
 import { trpc } from "@/lib/trpc";
 import {
   ArrowLeft, ShieldCheck, Store, User, Bike, Phone, Mail, MapPin,
-  Wallet, Calendar, Clock, ShoppingBag, TrendingUp, CheckCircle2, XCircle, Gift,
+  Calendar, Clock, ShoppingBag, TrendingUp, CheckCircle2, XCircle, Gift,
 } from "lucide-react";
 
 const ROLE_LABELS: Record<string, string> = { user: "ผู้ใช้", merchant: "ร้านค้า", admin: "แอดมิน", rider: "ไรเดอร์" };
@@ -28,14 +28,6 @@ const STATUS_COLORS: Record<string, string> = {
   delivered: "bg-green-100 text-green-700",
   cancelled: "bg-red-100 text-red-600",
 };
-const TX_LABELS: Record<string, string> = {
-  topup: "เติมเงิน",
-  order_payment: "ใช้จ่ายออเดอร์",
-  order_refund: "คืนเงินออเดอร์",
-  admin_adjust: "ปรับโดยแอดมิน",
-  cashback: "Cashback",
-};
-
 function fmt(iso: string | Date | null | undefined) {
   if (!iso) return "—";
   return new Date(iso).toLocaleString("th-TH", {
@@ -62,7 +54,9 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
   }
   if (!data) return null;
 
-  const { user, metrics, customerOrders, ownedRestaurants, topups, walletTxs } = data as any;
+  // Backend still returns `topups` + `walletTxs` until the cash-only
+  // cleanup ships; the UI ignores them now that wallet is gone.
+  const { user, metrics, customerOrders, ownedRestaurants } = data as any;
   const role = user.role ?? "user";
   const RoleIcon = ROLE_ICONS[role] ?? User;
 
@@ -116,13 +110,6 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
           label="ใช้จ่ายรวม"
           value={`฿${metrics.totalSpent.toLocaleString()}`}
           sub="ออเดอร์ที่ส่งสำเร็จ"
-        />
-        <KpiCard
-          icon={<Wallet className="w-5 h-5" />}
-          color="blue"
-          label="Customer wallet"
-          value={`฿${(user.customerWalletBalance ?? 0).toLocaleString()}`}
-          sub={role === "rider" ? `Rider wallet ฿${(user.riderWalletBalance ?? 0).toLocaleString()}` : undefined}
         />
         <KpiCard
           icon={<Gift className="w-5 h-5" />}
@@ -228,84 +215,6 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
         </div>
       </div>
 
-      {/* Wallet transactions */}
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-        <div className="px-5 py-3 border-b border-gray-100">
-          <h2 className="text-sm font-semibold text-gray-700">ธุรกรรม Wallet ล่าสุด</h2>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-100 bg-gray-50/50 text-xs text-gray-500">
-                <th className="text-left px-5 py-2.5 font-medium">#</th>
-                <th className="text-left px-4 py-2.5 font-medium">ประเภท</th>
-                <th className="text-left px-4 py-2.5 font-medium">จำนวน</th>
-                <th className="text-left px-4 py-2.5 font-medium">หมายเหตุ</th>
-                <th className="text-left px-4 py-2.5 font-medium">เวลา</th>
-              </tr>
-            </thead>
-            <tbody>
-              {walletTxs.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-gray-400">ยังไม่มีธุรกรรม</td>
-                </tr>
-              ) : walletTxs.map((t: any) => {
-                const amt = Number(t.amount);
-                return (
-                  <tr key={t.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
-                    <td className="px-5 py-3 text-gray-400 font-mono text-xs">{t.id}</td>
-                    <td className="px-4 py-3 text-gray-700">{TX_LABELS[t.type] ?? t.type}</td>
-                    <td className={`px-4 py-3 font-medium ${amt >= 0 ? "text-green-600" : "text-red-500"}`}>
-                      {amt >= 0 ? "+" : ""}฿{amt.toLocaleString()}
-                    </td>
-                    <td className="px-4 py-3 text-gray-500 max-w-[280px] truncate">{t.note ?? "—"}</td>
-                    <td className="px-4 py-3 text-gray-400 text-xs whitespace-nowrap">{fmt(t.createdAt)}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Customer topups */}
-      {topups.length > 0 && (
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-          <div className="px-5 py-3 border-b border-gray-100">
-            <h2 className="text-sm font-semibold text-gray-700">ประวัติเติม Customer Wallet</h2>
-          </div>
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-100 bg-gray-50/50 text-xs text-gray-500">
-                <th className="text-left px-5 py-2.5 font-medium">#</th>
-                <th className="text-left px-4 py-2.5 font-medium">จำนวน</th>
-                <th className="text-left px-4 py-2.5 font-medium">สถานะ</th>
-                <th className="text-left px-4 py-2.5 font-medium">หมายเหตุ</th>
-                <th className="text-left px-4 py-2.5 font-medium">เวลา</th>
-              </tr>
-            </thead>
-            <tbody>
-              {topups.map((t: any) => (
-                <tr key={t.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
-                  <td className="px-5 py-3 text-gray-400 font-mono text-xs">{t.id}</td>
-                  <td className="px-4 py-3 font-medium text-green-600">฿{Number(t.amount).toLocaleString()}</td>
-                  <td className="px-4 py-3">
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                      t.status === "approved" ? "bg-green-100 text-green-700"
-                        : t.status === "rejected" ? "bg-red-100 text-red-600"
-                        : "bg-yellow-100 text-yellow-700"
-                    }`}>
-                      {t.status === "approved" ? "อนุมัติ" : t.status === "rejected" ? "ปฏิเสธ" : "รอยืนยัน"}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-gray-500 max-w-[280px] truncate">{t.adminNote ?? "—"}</td>
-                  <td className="px-4 py-3 text-gray-400 text-xs whitespace-nowrap">{fmt(t.createdAt)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
     </div>
   );
 }
