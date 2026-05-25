@@ -1,13 +1,28 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { trpc } from "@/lib/trpc";
-import { Bike, Wifi, WifiOff, TrendingUp, Package, Trash2 } from "lucide-react";
+import {
+  Bike,
+  CheckCircle2,
+  Loader2,
+  Package,
+  ShieldCheck,
+  Trash2,
+  TrendingUp,
+  Wifi,
+  WifiOff,
+  XCircle,
+} from "lucide-react";
+
+type ApprovalFilter = "all" | "pending" | "approved" | "rejected";
 
 export default function RidersPage() {
-  const { data: riders = [], isLoading, refetch } = trpc.admin.listRiders.useQuery(undefined, {
+  const utils = trpc.useUtils();
+  const { data: ridersAll = [], isLoading, refetch } = trpc.admin.listRiders.useQuery(undefined, {
     refetchInterval: 30000,
   });
+  const [filter, setFilter] = useState<ApprovalFilter>("all");
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [bulkConfirm, setBulkConfirm] = useState(false);
   const deleteRiders = trpc.admin.deleteRiders.useMutation({
@@ -24,6 +39,35 @@ export default function RidersPage() {
     },
     onError: (err: any) => alert(err?.message ?? "ลบหลายรายการไม่สำเร็จ"),
   });
+
+  const [busyRiderId, setBusyRiderId] = useState<number | null>(null);
+  const reviewDocs = trpc.admin.reviewRiderDocs.useMutation({
+    onSuccess: () => {
+      utils.admin.listRiders.invalidate();
+      setBusyRiderId(null);
+    },
+    onError: (err: any) => {
+      alert(err?.message ?? "ไม่สำเร็จ");
+      setBusyRiderId(null);
+    },
+  });
+
+  const counts = useMemo(() => {
+    let pending = 0;
+    let approved = 0;
+    let rejected = 0;
+    for (const r of ridersAll as any[]) {
+      if (r.riderApprovalStatus === "pending") pending += 1;
+      else if (r.riderApprovalStatus === "approved") approved += 1;
+      else if (r.riderApprovalStatus === "rejected") rejected += 1;
+    }
+    return { all: ridersAll.length, pending, approved, rejected };
+  }, [ridersAll]);
+
+  const riders = useMemo(() => {
+    if (filter === "all") return ridersAll;
+    return (ridersAll as any[]).filter((r) => r.riderApprovalStatus === filter);
+  }, [ridersAll, filter]);
 
   // Drop selections that left the visible list
   useEffect(() => {
@@ -100,6 +144,41 @@ export default function RidersPage() {
         </div>
       </div>
 
+      {/* Verification filter chips */}
+      <div className="flex flex-wrap items-center gap-2 mb-4">
+        <FilterChip
+          active={filter === "all"}
+          onClick={() => setFilter("all")}
+          icon={<Bike className="w-3.5 h-3.5" />}
+          label="ทั้งหมด"
+          count={counts.all}
+        />
+        <FilterChip
+          active={filter === "pending"}
+          onClick={() => setFilter("pending")}
+          icon={<ShieldCheck className="w-3.5 h-3.5" />}
+          label="รอตรวจสอบ"
+          count={counts.pending}
+          tone="amber"
+        />
+        <FilterChip
+          active={filter === "approved"}
+          onClick={() => setFilter("approved")}
+          icon={<CheckCircle2 className="w-3.5 h-3.5" />}
+          label="อนุมัติแล้ว"
+          count={counts.approved}
+          tone="emerald"
+        />
+        <FilterChip
+          active={filter === "rejected"}
+          onClick={() => setFilter("rejected")}
+          icon={<XCircle className="w-3.5 h-3.5" />}
+          label="ถูกปฏิเสธ"
+          count={counts.rejected}
+          tone="red"
+        />
+      </div>
+
       {selected.size > 0 && (
         <div className="flex items-center justify-between mb-3 px-4 py-2.5 bg-orange-50 border border-orange-200 rounded-xl">
           <span className="text-sm text-gray-700">
@@ -140,6 +219,7 @@ export default function RidersPage() {
               </th>
               <th className="text-left px-4 py-3 font-medium text-gray-600">ไรเดอร์</th>
               <th className="text-left px-4 py-3 font-medium text-gray-600">สถานะ</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-600">ยืนยันตัวตน</th>
               <th className="text-left px-4 py-3 font-medium text-gray-600">วันนี้</th>
               <th className="text-left px-4 py-3 font-medium text-gray-600">รายได้วันนี้</th>
               <th className="text-left px-4 py-3 font-medium text-gray-600">ทั้งหมด</th>
@@ -150,7 +230,7 @@ export default function RidersPage() {
           <tbody>
             {riders.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-gray-400">ยังไม่มีไรเดอร์</td>
+                <td colSpan={9} className="px-4 py-8 text-center text-gray-400">ยังไม่มีไรเดอร์</td>
               </tr>
             ) : riders.map((r: any) => {
               const isSelected = selected.has(r.id);
@@ -194,6 +274,17 @@ export default function RidersPage() {
                     </span>
                   )}
                 </td>
+                <td className="px-4 py-3">
+                  <VerificationCell
+                    riderId={r.id}
+                    status={r.riderApprovalStatus}
+                    busy={busyRiderId === r.id && reviewDocs.isPending}
+                    onApprove={() => {
+                      setBusyRiderId(r.id);
+                      reviewDocs.mutate({ riderId: r.id, decision: "approved" });
+                    }}
+                  />
+                </td>
                 <td className="px-4 py-3 font-medium text-gray-900">{r.todayDelivered} งาน</td>
                 <td className="px-4 py-3 font-medium text-green-600">฿{r.todayEarnings.toLocaleString()}</td>
                 <td className="px-4 py-3 font-medium text-gray-900">{r.totalDelivered} งาน</td>
@@ -214,6 +305,7 @@ export default function RidersPage() {
         </table>
       </div>
 
+      {/* helpers below */}
       {bulkConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
@@ -248,4 +340,102 @@ export default function RidersPage() {
       )}
     </div>
   );
+}
+
+function FilterChip({
+  active,
+  onClick,
+  icon,
+  label,
+  count,
+  tone = "slate",
+}: {
+  active: boolean;
+  onClick: () => void;
+  icon: React.ReactNode;
+  label: string;
+  count: number;
+  tone?: "slate" | "amber" | "emerald" | "red";
+}) {
+  const palette =
+    tone === "amber"
+      ? { activeBg: "bg-amber-500", activeText: "text-white", chip: "bg-amber-100 text-amber-700" }
+      : tone === "emerald"
+        ? { activeBg: "bg-emerald-600", activeText: "text-white", chip: "bg-emerald-100 text-emerald-700" }
+        : tone === "red"
+          ? { activeBg: "bg-red-500", activeText: "text-white", chip: "bg-red-100 text-red-700" }
+          : { activeBg: "bg-gray-900", activeText: "text-white", chip: "bg-gray-200 text-gray-700" };
+  return (
+    <button
+      onClick={onClick}
+      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+        active
+          ? `${palette.activeBg} ${palette.activeText}`
+          : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"
+      }`}
+    >
+      {icon}
+      {label}
+      <span
+        className={`inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-[11px] font-semibold ${
+          active ? "bg-white/25 text-white" : palette.chip
+        }`}
+      >
+        {count}
+      </span>
+    </button>
+  );
+}
+
+function VerificationCell({
+  riderId,
+  status,
+  busy,
+  onApprove,
+}: {
+  riderId: number;
+  status: "none" | "pending" | "approved" | "rejected" | string;
+  busy: boolean;
+  onApprove: () => void;
+}) {
+  if (status === "approved") {
+    return (
+      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700">
+        <CheckCircle2 className="w-3 h-3" />
+        อนุมัติแล้ว
+      </span>
+    );
+  }
+  if (status === "rejected") {
+    return (
+      <Link
+        href={`/dashboard/riders/${riderId}`}
+        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700 hover:bg-red-200 transition-colors"
+      >
+        <XCircle className="w-3 h-3" />
+        ดูเหตุผล
+      </Link>
+    );
+  }
+  if (status === "pending") {
+    return (
+      <div className="flex items-center gap-1.5">
+        <Link
+          href={`/dashboard/riders/${riderId}`}
+          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-700 hover:bg-amber-200 transition-colors"
+        >
+          ดูเอกสาร
+        </Link>
+        <button
+          onClick={onApprove}
+          disabled={busy}
+          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60 transition-colors"
+        >
+          {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />}
+          อนุมัติ
+        </button>
+      </div>
+    );
+  }
+  return <span className="text-xs text-gray-400">ยังไม่ส่ง</span>;
 }
