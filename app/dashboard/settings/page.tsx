@@ -1787,11 +1787,336 @@ export default function SettingsPage() {
       <AppAvailabilityCard />
       <HomeCardsCard />
       <HomePromoBannerCard />
+      <ExtraServicesCard />
       <DeliverySettings />
       <TransportPricingCard />
       <InspectionPricingCard />
       <PromoSection />
     </div>
+  );
+}
+
+/**
+ * ExtraServicesCard — manage the JSON-backed list rendered on the
+ * customer home as "บริการอื่นๆ". Each row is an editable service
+ * entry; the whole array is serialized to system_settings under
+ * `extra_services_v1` whenever the admin clicks "Save".
+ */
+type ExtraServiceForm = {
+  id: string;
+  label: string;
+  subtitle: string;
+  iconName: string;
+  iconColor: string;
+  gradient: [string, string, string];
+  route: string;
+  imageUrl: string;
+  enabled: boolean;
+  sortOrder: number;
+};
+
+const DEFAULT_EXTRA_SERVICE: ExtraServiceForm = {
+  id: "",
+  label: "",
+  subtitle: "",
+  iconName: "sparkles",
+  iconColor: "#7C3AED",
+  gradient: ["#A78BFA", "#8B5CF6", "#D946EF"],
+  route: "/",
+  imageUrl: "",
+  enabled: true,
+  sortOrder: 99,
+};
+
+function parseExtraServices(raw: string | undefined): ExtraServiceForm[] {
+  if (!raw) return [];
+  try {
+    const arr = JSON.parse(raw) as Partial<ExtraServiceForm>[];
+    if (!Array.isArray(arr)) return [];
+    return arr.map((s, i) => ({
+      ...DEFAULT_EXTRA_SERVICE,
+      ...s,
+      id: s.id || `svc_${Date.now()}_${i}`,
+      gradient: (Array.isArray(s.gradient) && s.gradient.length === 3
+        ? s.gradient
+        : DEFAULT_EXTRA_SERVICE.gradient) as [string, string, string],
+    } as ExtraServiceForm));
+  } catch {
+    return [];
+  }
+}
+
+function ExtraServicesCard() {
+  const utils = trpc.useUtils();
+  const { data: settingsRaw } = trpc.admin.getSettings.useQuery();
+  const updateSettings = trpc.admin.updateSettings.useMutation({
+    onSuccess: async () => {
+      await utils.admin.getSettings.invalidate();
+      setNotice({ type: "success", message: "บันทึกแล้ว" });
+      setTimeout(() => setNotice(null), 2400);
+    },
+    onError: (e) => setNotice({ type: "error", message: e.message }),
+  });
+  const settings = (settingsRaw || {}) as Record<string, string>;
+
+  const [items, setItems] = useState<ExtraServiceForm[]>([]);
+  const [notice, setNotice] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const [uploadingIdx, setUploadingIdx] = useState<number | null>(null);
+
+  // Sync from server on first load + when settings refresh.
+  useEffect(() => {
+    setItems(parseExtraServices(settings.extra_services_v1));
+  }, [settings.extra_services_v1]);
+
+  const updateItem = (idx: number, patch: Partial<ExtraServiceForm>) => {
+    setItems((prev) => prev.map((s, i) => (i === idx ? { ...s, ...patch } : s)));
+  };
+  const updateGradient = (idx: number, col: 0 | 1 | 2, hex: string) => {
+    setItems((prev) =>
+      prev.map((s, i) => {
+        if (i !== idx) return s;
+        const next = [...s.gradient] as [string, string, string];
+        next[col] = hex;
+        return { ...s, gradient: next };
+      }),
+    );
+  };
+  const removeItem = (idx: number) => {
+    setItems((prev) => prev.filter((_, i) => i !== idx));
+  };
+  const addItem = () => {
+    setItems((prev) => [
+      ...prev,
+      {
+        ...DEFAULT_EXTRA_SERVICE,
+        id: `svc_${Date.now()}`,
+        sortOrder: prev.length + 1,
+      },
+    ]);
+  };
+
+  const handleUploadImage = async (idx: number, file: File) => {
+    setUploadingIdx(idx);
+    try {
+      const url = await uploadToR2(file, getToken());
+      updateItem(idx, { imageUrl: url });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "อัปโหลดไม่สำเร็จ";
+      setNotice({ type: "error", message: msg });
+    } finally {
+      setUploadingIdx(null);
+    }
+  };
+
+  const save = async () => {
+    // Strip empty labels so we don't ship blank rows to customers.
+    const clean = items
+      .filter((s) => s.label.trim().length > 0)
+      .map((s) => ({ ...s, label: s.label.trim(), subtitle: s.subtitle.trim() }));
+    await updateSettings.mutateAsync({
+      extra_services_v1: JSON.stringify(clean),
+    });
+  };
+
+  return (
+    <section className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 mb-6">
+      <div className="flex items-center justify-between mb-1">
+        <h2 className="text-lg font-bold text-gray-900 inline-flex items-center gap-2">
+          <Wrench className="w-4 h-4 text-violet-600" />
+          บริการอื่นๆ ในหน้าแรก
+        </h2>
+        <button
+          type="button"
+          onClick={addItem}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-violet-600 text-white text-xs font-semibold px-3 py-1.5"
+        >
+          <Plus className="w-3.5 h-3.5" /> เพิ่มบริการ
+        </button>
+      </div>
+      <p className="text-xs text-gray-500 mb-4">
+        ปุ่ม &quot;บริการอื่นๆ&quot; ในแอป (ทั้ง LIFF เเละ native) จะแสดงรายการนี้ตามลำดับ sortOrder
+      </p>
+
+      {notice && (
+        <div className={`mb-3 rounded-lg px-3 py-2 text-xs font-semibold ${
+          notice.type === "success" ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"
+        }`}>
+          {notice.message}
+        </div>
+      )}
+
+      {items.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-gray-200 px-4 py-8 text-center text-sm text-gray-500">
+          ยังไม่มีรายการ — กด &quot;เพิ่มบริการ&quot; เพื่อสร้างใหม่
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {items.map((svc, idx) => (
+            <div key={svc.id} className="rounded-xl border border-gray-200 p-4">
+              <div className="flex items-start justify-between gap-3 mb-3">
+                <div className="flex items-center gap-2">
+                  <label className="inline-flex items-center gap-1.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={svc.enabled}
+                      onChange={(e) => updateItem(idx, { enabled: e.target.checked })}
+                      className="sr-only peer"
+                    />
+                    <span className="w-9 h-5 bg-gray-200 peer-checked:bg-violet-600 rounded-full transition-colors relative">
+                      <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${svc.enabled ? "translate-x-4" : ""}`} />
+                    </span>
+                    <span className="text-xs font-semibold text-gray-700">{svc.enabled ? "เปิด" : "ปิด"}</span>
+                  </label>
+                  <span className="text-[10px] uppercase tracking-wider text-gray-400 ml-2">#{svc.id}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => removeItem(idx)}
+                  className="inline-flex items-center gap-1 rounded-md border border-rose-200 bg-rose-50 text-rose-600 text-xs font-semibold px-2 py-1"
+                >
+                  <Trash2 className="w-3.5 h-3.5" /> ลบ
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <TextField
+                  label="ชื่อบริการ (แสดงในการ์ด)"
+                  value={svc.label}
+                  onChange={(v) => updateItem(idx, { label: v })}
+                  placeholder="เช่น ตรวจสภาพ-พรบ."
+                />
+                <TextField
+                  label="คำบรรยายย่อย"
+                  value={svc.subtitle}
+                  onChange={(v) => updateItem(idx, { subtitle: v })}
+                  placeholder="เช่น สะดวก รวดเร็ว"
+                />
+                <TextField
+                  label="ปลายทาง (path หรือ https://...)"
+                  value={svc.route}
+                  onChange={(v) => updateItem(idx, { route: v })}
+                  placeholder="/inspection"
+                />
+                <NumField
+                  label="ลำดับ (น้อย = ขึ้นก่อน)"
+                  value={String(svc.sortOrder)}
+                  onChange={(s) => updateItem(idx, { sortOrder: Number(s) || 0 })}
+                />
+                <TextField
+                  label="ชื่อไอคอน (key)"
+                  value={svc.iconName}
+                  onChange={(v) => updateItem(idx, { iconName: v })}
+                  placeholder="wrench.adjustable"
+                />
+                <ColorField
+                  label="สีไอคอน"
+                  value={svc.iconColor}
+                  onChange={(v) => updateItem(idx, { iconColor: v })}
+                />
+              </div>
+
+              <p className="text-[11px] font-semibold text-gray-600 mt-3 mb-1.5">สีพื้นการ์ด (Gradient 3 จุด)</p>
+              <div className="grid grid-cols-3 gap-2">
+                <ColorField label="จุด 1" value={svc.gradient[0]} onChange={(v) => updateGradient(idx, 0, v)} />
+                <ColorField label="จุด 2" value={svc.gradient[1]} onChange={(v) => updateGradient(idx, 1, v)} />
+                <ColorField label="จุด 3" value={svc.gradient[2]} onChange={(v) => updateGradient(idx, 2, v)} />
+              </div>
+
+              <div className="mt-3">
+                <p className="text-[11px] font-semibold text-gray-600 mb-1.5">รูปการ์ด (ทับ gradient ถ้ามี)</p>
+                {svc.imageUrl ? (
+                  <div className="flex items-center gap-3">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={svc.imageUrl} alt="" className="w-24 h-16 rounded-lg object-cover border border-gray-200" />
+                    <button
+                      type="button"
+                      onClick={() => updateItem(idx, { imageUrl: "" })}
+                      className="text-xs font-semibold text-rose-600 underline"
+                    >
+                      ลบรูป
+                    </button>
+                  </div>
+                ) : (
+                  <label className="inline-flex items-center gap-2 cursor-pointer rounded-lg border border-dashed border-gray-300 px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50">
+                    <ImageIcon className="w-3.5 h-3.5" />
+                    {uploadingIdx === idx ? "กำลังอัปโหลด..." : "อัปโหลดรูป"}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) handleUploadImage(idx, f);
+                      }}
+                    />
+                  </label>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <button
+        type="button"
+        onClick={save}
+        disabled={updateSettings.isPending}
+        className="mt-5 inline-flex items-center gap-2 rounded-lg bg-violet-600 text-white px-4 py-2.5 text-sm font-semibold disabled:opacity-60"
+      >
+        {updateSettings.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+        {updateSettings.isPending ? "กำลังบันทึก..." : "บันทึกบริการ"}
+      </button>
+    </section>
+  );
+}
+
+function TextField({
+  label, value, onChange, placeholder,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+}) {
+  return (
+    <label className="block">
+      <span className="block text-[11px] font-semibold text-gray-600 mb-1">{label}</span>
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-200"
+      />
+    </label>
+  );
+}
+
+function ColorField({
+  label, value, onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <label className="block">
+      <span className="block text-[11px] font-semibold text-gray-600 mb-1">{label}</span>
+      <div className="flex items-center gap-2">
+        <input
+          type="color"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="w-9 h-9 rounded border border-gray-200 cursor-pointer"
+        />
+        <input
+          type="text"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="flex-1 rounded-lg border border-gray-200 px-2 py-1.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-violet-200"
+        />
+      </div>
+    </label>
   );
 }
 
