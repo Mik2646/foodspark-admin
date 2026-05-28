@@ -281,12 +281,9 @@ export default function DashboardPage() {
         className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
       >
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">
+          <h1 className="text-xl sm:text-2xl font-semibold text-gray-500">
             ยินดีต้อนรับกลับ, {adminName} 👋
           </h1>
-          <p className="text-xs sm:text-sm text-gray-400 mt-1">
-            ภาพรวมระบบสำหรับวันนี้ · อัปเดตทุก 30 วินาที
-          </p>
         </div>
 
         <div className="flex items-center gap-2">
