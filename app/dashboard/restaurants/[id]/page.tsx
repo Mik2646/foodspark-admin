@@ -6,6 +6,7 @@ import { trpc, getToken } from "@/lib/trpc";
 import { ArrowLeft, Store, Star, Clock, Truck, ChevronRight, Package, Pencil, Plus, Trash2, Check, X, ImageIcon, Zap, ShoppingBasket, CalendarClock, Footprints, Pause, Play, Loader2, Save } from "lucide-react";
 import ShareRestaurantButton from "@/components/ShareRestaurantButton";
 import OpeningHoursEditor from "@/components/OpeningHoursEditor";
+import RestaurantLocationCard from "@/components/RestaurantLocationCard";
 import MenuItemForm, {
   EMPTY_MENU_ITEM_FORM,
   cleanOptionsForSubmit,
@@ -441,6 +442,19 @@ export default function RestaurantDetailPage({ params }: { params: Promise<{ id:
           </div>
         )}
       </div>
+
+      {/* Map pin — admin can drag/click to fix wrong pins set during
+          merchant setup. Bypasses merchant-side "shop already open"
+          guard so ops can correct location post-go-live. */}
+      <RestaurantLocationCard
+        lat={(r as { lat?: number | null }).lat ?? null}
+        lng={(r as { lng?: number | null }).lng ?? null}
+        address={r.address}
+        saving={updateRestaurant.isPending}
+        onSave={(coords) =>
+          updateRestaurant.mutate({ id, lat: coords.lat, lng: coords.lng })
+        }
+      />
 
       {/* Owner */}
       {owner && (
