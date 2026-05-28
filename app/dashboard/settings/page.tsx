@@ -48,6 +48,28 @@ const DELIVERY_PRESETS = [
   { label: "เร่งด่วน", values: { baseFee: 20, perKmRate: 10, minFee: 25, maxFee: 120 } },
 ];
 
+// Phase 6 — concierge (ร้านดัง / รับหิ้ว) service-fee policy. Separate
+// numbers from normal delivery: long city hauls, higher per-km + caps.
+const CONCIERGE_KEYS = {
+  baseFee: "concierge_base_fee",
+  perKmRate: "concierge_per_km_rate",
+  minFee: "concierge_min_fee",
+  maxFee: "concierge_max_fee",
+} as const;
+
+const CONCIERGE_DEFAULTS = {
+  baseFee: 40,
+  perKmRate: 8,
+  minFee: 40,
+  maxFee: 300,
+};
+
+const CONCIERGE_PRESETS = [
+  { label: "ใกล้เมือง", values: { baseFee: 40, perKmRate: 7, minFee: 40, maxFee: 250 } },
+  { label: "มาตรฐาน", values: { baseFee: 40, perKmRate: 8, minFee: 40, maxFee: 300 } },
+  { label: "ไกลมาก", values: { baseFee: 50, perKmRate: 10, minFee: 60, maxFee: 400 } },
+];
+
 type PromoCode = {
   id: number;
   code: string;
@@ -337,6 +359,149 @@ function DeliverySettings() {
         >
           {updateSettings.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
           {updateSettings.isPending ? "กำลังบันทึก..." : "บันทึกนโยบายค่าส่ง"}
+        </button>
+        {!dirty && !updateSettings.isPending && (
+          <span className="text-xs text-gray-400">ข้อมูลล่าสุดตรงกับที่บันทึกแล้ว</span>
+        )}
+      </div>
+    </section>
+  );
+}
+
+/**
+ * Phase 6 — concierge (ร้านดัง / รับหิ้ว) service-fee policy. Same shape as
+ * DeliverySettings but writes the concierge_* keys via the generic
+ * updateSettings mutation. Violet accent to distinguish from delivery.
+ */
+function ConciergeSettings() {
+  const utils = trpc.useUtils();
+  const { data: settingsRaw, isLoading } = trpc.admin.getSettings.useQuery();
+  const updateSettings = trpc.admin.updateSettings.useMutation({
+    onSuccess: async () => {
+      await utils.admin.getSettings.invalidate();
+      setNotice({ type: "success", message: "บันทึกค่าบริการรับหิ้วแล้ว" });
+      setTimeout(() => setNotice(null), 2600);
+    },
+    onError: (e) => setNotice({ type: "error", message: e.message || "บันทึกไม่สำเร็จ" }),
+  });
+  const settings = useMemo(() => (settingsRaw || {}) as Record<string, string>, [settingsRaw]);
+  const [draft, setDraft] = useState<{ baseFee: string; perKmRate: string; minFee: string; maxFee: string } | null>(null);
+  const [notice, setNotice] = useState<{ type: "success" | "error"; message: string } | null>(null);
+
+  const initialParsed = useMemo(() => ({
+    baseFee: parseSettingNumber(settings[CONCIERGE_KEYS.baseFee], CONCIERGE_DEFAULTS.baseFee),
+    perKmRate: parseSettingNumber(settings[CONCIERGE_KEYS.perKmRate], CONCIERGE_DEFAULTS.perKmRate),
+    minFee: parseSettingNumber(settings[CONCIERGE_KEYS.minFee], CONCIERGE_DEFAULTS.minFee),
+    maxFee: parseSettingNumber(settings[CONCIERGE_KEYS.maxFee], CONCIERGE_DEFAULTS.maxFee),
+  }), [settings]);
+
+  const effectiveDraft = draft || {
+    baseFee: String(initialParsed.baseFee),
+    perKmRate: String(initialParsed.perKmRate),
+    minFee: String(initialParsed.minFee),
+    maxFee: String(initialParsed.maxFee),
+  };
+  const parsed = useMemo(() => ({
+    baseFee: parseSettingNumber(effectiveDraft.baseFee, CONCIERGE_DEFAULTS.baseFee),
+    perKmRate: parseSettingNumber(effectiveDraft.perKmRate, CONCIERGE_DEFAULTS.perKmRate),
+    minFee: parseSettingNumber(effectiveDraft.minFee, CONCIERGE_DEFAULTS.minFee),
+    maxFee: parseSettingNumber(effectiveDraft.maxFee, CONCIERGE_DEFAULTS.maxFee),
+  }), [effectiveDraft.baseFee, effectiveDraft.maxFee, effectiveDraft.minFee, effectiveDraft.perKmRate]);
+
+  const validationMessage = useMemo(() => {
+    if (parsed.maxFee < parsed.minFee) return "ค่าบริการสูงสุดต้องมากกว่าหรือเท่ากับขั้นต่ำ";
+    return "";
+  }, [parsed.maxFee, parsed.minFee]);
+
+  const dirty = useMemo(() =>
+    parsed.baseFee !== initialParsed.baseFee || parsed.perKmRate !== initialParsed.perKmRate ||
+    parsed.minFee !== initialParsed.minFee || parsed.maxFee !== initialParsed.maxFee,
+    [initialParsed, parsed]);
+
+  const previewRows = useMemo(() => [5, 10, 20, 30, 40, 50].map((distance) => ({
+    distance,
+    fee: calcDeliveryFee(distance, parsed.baseFee, parsed.perKmRate, parsed.minFee, parsed.maxFee),
+  })), [parsed.baseFee, parsed.maxFee, parsed.minFee, parsed.perKmRate]);
+
+  const applyPreset = (values: typeof CONCIERGE_DEFAULTS) => {
+    setDraft({ baseFee: String(values.baseFee), perKmRate: String(values.perKmRate), minFee: String(values.minFee), maxFee: String(values.maxFee) });
+    setNotice(null);
+  };
+
+  const handleSave = async () => {
+    if (validationMessage) { setNotice({ type: "error", message: validationMessage }); return; }
+    await updateSettings.mutateAsync({
+      [CONCIERGE_KEYS.baseFee]: String(parsed.baseFee),
+      [CONCIERGE_KEYS.perKmRate]: String(parsed.perKmRate),
+      [CONCIERGE_KEYS.minFee]: String(parsed.minFee),
+      [CONCIERGE_KEYS.maxFee]: String(parsed.maxFee),
+    });
+    setDraft(null);
+  };
+
+  return (
+    <section className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 mb-6">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+            <Settings className="w-4 h-4 text-violet-500" />
+            ค่าบริการรับหิ้ว (ร้านดัง)
+          </h2>
+          <p className="text-xs text-gray-500 mt-1">
+            ค่าบริการรับหิ้วร้านนอกพื้นที่ = ค่าพื้นฐาน + (ระยะถนน × บาท/กม.) clamp ขั้นต่ำ-สูงสุด · ค่าอาหารลูกค้าจ่ายสดตามบิล
+          </p>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          {CONCIERGE_PRESETS.map((preset) => (
+            <button key={preset.label} type="button" onClick={() => applyPreset(preset.values)}
+              className="px-3 py-1.5 rounded-lg border border-violet-200 text-violet-600 text-xs font-semibold hover:bg-violet-50 transition-colors">
+              {preset.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      {notice && (
+        <div className={`mb-4 rounded-xl px-3 py-2 text-sm ${notice.type === "success" ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}`}>
+          {notice.message}
+        </div>
+      )}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+        {[
+          { key: "baseFee", label: "ค่าบริการพื้นฐาน (฿)" },
+          { key: "perKmRate", label: "อัตราต่อ กม. (฿)" },
+          { key: "minFee", label: "ขั้นต่ำ (฿)" },
+          { key: "maxFee", label: "สูงสุด (฿)" },
+        ].map(({ key, label }) => (
+          <label key={label} className="block">
+            <span className="block text-xs font-medium text-gray-500 mb-1">{label}</span>
+            <input type="number" min="0" step="1"
+              value={effectiveDraft[key as keyof typeof effectiveDraft]}
+              onChange={(e) => setDraft((prev) => ({ ...(prev || effectiveDraft), [key]: e.target.value }))}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-violet-400" />
+          </label>
+        ))}
+      </div>
+      {validationMessage && (
+        <div className="mb-4 rounded-xl px-3 py-2 text-sm bg-amber-50 text-amber-700 inline-flex items-center gap-2">
+          <AlertCircle className="w-4 h-4" />{validationMessage}
+        </div>
+      )}
+      <div className="mb-4 rounded-xl border border-gray-100 bg-gray-50 p-4">
+        <div className="text-xs font-semibold text-gray-600 mb-2">ตัวอย่างค่าบริการตามระยะทาง</div>
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
+          {previewRows.map((row) => (
+            <div key={row.distance} className="rounded-lg bg-white border border-gray-200 px-2.5 py-2 text-center">
+              <div className="text-[11px] text-gray-500">{row.distance} กม.</div>
+              <div className="text-sm font-semibold text-gray-900">฿{row.fee}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="flex items-center gap-2">
+        <button onClick={handleSave} disabled={isLoading || updateSettings.isPending || !dirty || Boolean(validationMessage)}
+          className="px-4 py-2 bg-violet-500 text-white text-sm font-semibold rounded-lg hover:bg-violet-600 disabled:opacity-50 inline-flex items-center gap-2 transition-colors">
+          {updateSettings.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+          {updateSettings.isPending ? "กำลังบันทึก..." : "บันทึกค่าบริการรับหิ้ว"}
         </button>
         {!dirty && !updateSettings.isPending && (
           <span className="text-xs text-gray-400">ข้อมูลล่าสุดตรงกับที่บันทึกแล้ว</span>
@@ -1789,6 +1954,7 @@ export default function SettingsPage() {
       <HomePromoBannerCard />
       <ExtraServicesCard />
       <DeliverySettings />
+      <ConciergeSettings />
       <TransportPricingCard />
       <InspectionPricingCard />
       <PromoSection />

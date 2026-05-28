@@ -649,7 +649,7 @@ function RestaurantTypePanel({
   restaurant: Record<string, unknown>;
   markets: Array<{ id: string; name: string; village?: string | null }>;
   onSave: (payload: {
-    type: "regular" | "market" | "preorder";
+    type: "regular" | "market" | "preorder" | "concierge";
     marketId?: string | null;
     preorderCutoffTime?: string | null;
     preorderDeliveryStart?: string | null;
@@ -670,16 +670,20 @@ function RestaurantTypePanel({
     preorderLeadDays?: number | null;
     acceptsPickup?: boolean | null;
     pickupReadyMinutes?: number | null;
+    isConcierge?: boolean | null;
   };
 
-  // Derive the current type from the row's flags.
-  const initialType: "regular" | "market" | "preorder" = r.acceptsPreorder
-    ? "preorder"
-    : r.marketId
-      ? "market"
-      : "regular";
+  // Derive the current type from the row's flags. Concierge wins — it's
+  // mutually exclusive and clears the others server-side.
+  const initialType: "regular" | "market" | "preorder" | "concierge" = r.isConcierge
+    ? "concierge"
+    : r.acceptsPreorder
+      ? "preorder"
+      : r.marketId
+        ? "market"
+        : "regular";
 
-  const [type, setType] = useState<"regular" | "market" | "preorder">(initialType);
+  const [type, setType] = useState<"regular" | "market" | "preorder" | "concierge">(initialType);
   const [marketId, setMarketId] = useState<string>(r.marketId ?? "");
   const [cutoff, setCutoff] = useState<string>(r.preorderCutoffTime ?? "20:00");
   const [delStart, setDelStart] = useState<string>(r.preorderDeliveryStart ?? "16:00");
@@ -691,7 +695,9 @@ function RestaurantTypePanel({
   // Re-sync when the server pushes new data (after save).
   useEffect(() => {
     setType(
-      r.acceptsPreorder ? "preorder" : r.marketId ? "market" : "regular",
+      r.isConcierge
+        ? "concierge"
+        : r.acceptsPreorder ? "preorder" : r.marketId ? "market" : "regular",
     );
     setMarketId(r.marketId ?? "");
     if (r.preorderCutoffTime) setCutoff(r.preorderCutoffTime);
@@ -701,6 +707,7 @@ function RestaurantTypePanel({
     setPickupEnabled(Boolean(r.acceptsPickup));
     if (r.pickupReadyMinutes) setPickupMin(r.pickupReadyMinutes);
   }, [
+    r.isConcierge,
     r.acceptsPreorder,
     r.marketId,
     r.preorderCutoffTime,
@@ -748,6 +755,13 @@ function RestaurantTypePanel({
       icon: <CalendarClock className="w-5 h-5 text-amber-500" />,
       accent: "amber",
     },
+    {
+      key: "concierge" as const,
+      label: "ร้านดัง (รับหิ้ว)",
+      sub: "ร้านนอกพื้นที่ ไม่มีเมนู — ลูกค้าพิมพ์สั่ง ไรเดอร์ไปซื้อให้",
+      icon: <Star className="w-5 h-5 text-violet-500" />,
+      accent: "violet",
+    },
   ];
 
   return (
@@ -758,7 +772,7 @@ function RestaurantTypePanel({
       </div>
 
       {/* Radio cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
         {TYPES.map((opt) => {
           const selected = type === opt.key;
           return (
@@ -772,7 +786,9 @@ function RestaurantTypePanel({
                     ? "border-orange-400 bg-orange-50"
                     : opt.accent === "emerald"
                       ? "border-emerald-400 bg-emerald-50"
-                      : "border-amber-400 bg-amber-50"
+                      : opt.accent === "violet"
+                        ? "border-violet-400 bg-violet-50"
+                        : "border-amber-400 bg-amber-50"
                   : "border-gray-200 bg-white hover:bg-gray-50"
               }`}
             >
@@ -791,7 +807,9 @@ function RestaurantTypePanel({
                         ? "border-orange-500"
                         : opt.accent === "emerald"
                           ? "border-emerald-500"
-                          : "border-amber-500"
+                          : opt.accent === "violet"
+                            ? "border-violet-500"
+                            : "border-amber-500"
                       : "border-gray-300"
                   }`}
                 >
@@ -802,7 +820,9 @@ function RestaurantTypePanel({
                           ? "bg-orange-500"
                           : opt.accent === "emerald"
                             ? "bg-emerald-500"
-                            : "bg-amber-500"
+                            : opt.accent === "violet"
+                              ? "bg-violet-500"
+                              : "bg-amber-500"
                       }`}
                     />
                   )}
@@ -903,8 +923,23 @@ function RestaurantTypePanel({
         </div>
       )}
 
+      {type === "concierge" && (
+        <div className="rounded-xl bg-violet-50/60 border border-violet-100 p-3 mb-4 space-y-1.5">
+          <p className="text-xs font-semibold text-violet-800">ร้านดัง / รับหิ้ว</p>
+          <p className="text-[11px] text-violet-700 leading-relaxed">
+            ร้านนี้ไม่มีเมนูในระบบ — ลูกค้าพิมพ์รายการที่อยากสั่งเอง ไรเดอร์ขับไปซื้อในเมืองแล้วนำมาส่ง
+            ค่าบริการคิดตามระยะทาง (ตั้งเรตที่หน้า ตั้งค่า → ค่าบริการรับหิ้ว) ส่วนค่าอาหารลูกค้าจ่ายสดตามบิลตอนรับของ
+          </p>
+          <p className="text-[11px] text-violet-600">
+            อย่าลืมตั้งพิกัด (lat/lng) ของร้านในเมืองให้ถูก เพื่อคำนวณระยะ
+          </p>
+        </div>
+      )}
+
       {/* Pickup — independent of type. Stacks on top so any shop can
-          accept walk-in pickups regardless of its primary mode. */}
+          accept walk-in pickups regardless of its primary mode.
+          (Hidden for concierge — a far-away city shop has no walk-in.) */}
+      {type !== "concierge" && (
       <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 flex items-start gap-3">
         <label className="inline-flex items-center cursor-pointer mt-0.5">
           <input
@@ -940,6 +975,7 @@ function RestaurantTypePanel({
           )}
         </div>
       </div>
+      )}
 
       <div className="flex justify-end mt-4">
         <button
