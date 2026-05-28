@@ -8,8 +8,6 @@ import {
   Bike,
   TrendingUp,
   Activity,
-  Car,
-  Star,
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -165,63 +163,6 @@ export default function DashboardPage() {
           color="text-green-600"
           bg="bg-green-50"
         />
-      </div>
-
-      {/* Transport KPI strip — separate from food order stats so the
-          two products' health stays distinguishable at a glance. */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 sm:p-5">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-base font-bold text-gray-900 inline-flex items-center gap-1.5">
-            <Car size={16} className="text-sky-600" /> บริการรับส่ง
-          </h2>
-          <a
-            href="/dashboard/transport"
-            className="text-xs font-semibold text-orange-600 inline-flex items-center gap-1"
-          >
-            จัดการออเดอร์ →
-          </a>
-        </div>
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
-          <StatCard
-            icon={ClipboardList}
-            label="รอจ่ายงาน"
-            value={data?.transport?.pendingCount ?? 0}
-            color="text-amber-600"
-            bg="bg-amber-50"
-          />
-          <StatCard
-            icon={Activity}
-            label="กำลังให้บริการ"
-            value={data?.transport?.activeCount ?? 0}
-            color="text-blue-600"
-            bg="bg-blue-50"
-          />
-          <StatCard
-            icon={TrendingUp}
-            label="เสร็จวันนี้"
-            value={data?.transport?.todayCompletedCount ?? 0}
-            color="text-emerald-600"
-            bg="bg-emerald-50"
-          />
-          <StatCard
-            icon={DollarSign}
-            label="รายได้วันนี้"
-            value={`฿${(data?.transport?.todayRevenue ?? 0).toLocaleString()}`}
-            color="text-green-600"
-            bg="bg-green-50"
-          />
-          <StatCard
-            icon={Star}
-            label="คะแนนเฉลี่ย"
-            value={
-              data?.transport?.avgRating
-                ? `${data.transport.avgRating} / 5`
-                : "—"
-            }
-            color="text-amber-600"
-            bg="bg-amber-50"
-          />
-        </div>
       </div>
 
       {/* Charts row — trend (lg:span-2) + status donut */}
