@@ -180,7 +180,13 @@ export function Sidebar({
 
         <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-0.5">
           {links.map(({ href, label, icon: Icon }) => {
-            const active = pathname === href || pathname.startsWith(href + "/");
+            // The overview link is "/dashboard" — every subpage path starts
+            // with it, so prefix-matching would keep it highlighted everywhere.
+            // Match it exactly; all other links use prefix matching.
+            const active =
+              href === "/dashboard"
+                ? pathname === "/dashboard"
+                : pathname === href || pathname.startsWith(href + "/");
             const isApprovals = href === "/dashboard/approvals";
             const isInbox = href === "/dashboard/inbox";
             return (
