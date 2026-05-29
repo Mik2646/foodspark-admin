@@ -57,17 +57,21 @@ const CONCIERGE_KEYS = {
   maxFee: "concierge_max_fee",
 } as const;
 
+// perKm embeds the rider's ROUND TRIP (out to the city shop + back to
+// the customer ≈ 2× one-way). The rider keeps the whole fee, so 7/km on
+// the one-way distance ≈ 3.5/km of the real round trip — fuel + a little
+// labor without feeling steep to the customer.
 const CONCIERGE_DEFAULTS = {
-  baseFee: 20,
-  perKmRate: 5,
+  baseFee: 15,
+  perKmRate: 7,
   minFee: 30,
   maxFee: 250,
 };
 
 const CONCIERGE_PRESETS = [
-  { label: "ประหยัด", values: { baseFee: 20, perKmRate: 5, minFee: 30, maxFee: 200 } },
-  { label: "มาตรฐาน", values: { baseFee: 25, perKmRate: 6, minFee: 30, maxFee: 250 } },
-  { label: "ไกลมาก", values: { baseFee: 35, perKmRate: 8, minFee: 40, maxFee: 300 } },
+  { label: "พอดี", values: { baseFee: 15, perKmRate: 7, minFee: 30, maxFee: 250 } },
+  { label: "คุ้มไรเดอร์", values: { baseFee: 15, perKmRate: 9, minFee: 30, maxFee: 300 } },
+  { label: "ประหยัดลูกค้า", values: { baseFee: 15, perKmRate: 5, minFee: 30, maxFee: 200 } },
 ];
 
 type PromoCode = {
