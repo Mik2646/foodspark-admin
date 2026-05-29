@@ -58,16 +58,16 @@ const CONCIERGE_KEYS = {
 } as const;
 
 const CONCIERGE_DEFAULTS = {
-  baseFee: 40,
-  perKmRate: 8,
-  minFee: 40,
-  maxFee: 300,
+  baseFee: 20,
+  perKmRate: 5,
+  minFee: 30,
+  maxFee: 250,
 };
 
 const CONCIERGE_PRESETS = [
-  { label: "ใกล้เมือง", values: { baseFee: 40, perKmRate: 7, minFee: 40, maxFee: 250 } },
-  { label: "มาตรฐาน", values: { baseFee: 40, perKmRate: 8, minFee: 40, maxFee: 300 } },
-  { label: "ไกลมาก", values: { baseFee: 50, perKmRate: 10, minFee: 60, maxFee: 400 } },
+  { label: "ประหยัด", values: { baseFee: 20, perKmRate: 5, minFee: 30, maxFee: 200 } },
+  { label: "มาตรฐาน", values: { baseFee: 25, perKmRate: 6, minFee: 30, maxFee: 250 } },
+  { label: "ไกลมาก", values: { baseFee: 35, perKmRate: 8, minFee: 40, maxFee: 300 } },
 ];
 
 type PromoCode = {
