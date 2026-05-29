@@ -395,6 +395,7 @@ function OrderDetailModal({
 
   const isPreorder = o?.orderType === "preorder";
   const isPickup = o?.deliveryType === "pickup";
+  const isConcierge = o?.orderType === "concierge";
 
   const formatDateTime = (d: Date | string | null | undefined) => {
     if (!d) return "—";
@@ -595,6 +596,27 @@ function OrderDetailModal({
                   </div>
                 )}
               </div>
+
+              {/* Concierge purchase — actual food bill + rider note */}
+              {isConcierge && (
+                <div className="bg-gray-50 rounded-xl p-4">
+                  <p className="text-[11px] font-bold text-violet-600 uppercase tracking-wider mb-2">
+                    รับหิ้ว
+                  </p>
+                  <p className="text-sm text-gray-900">
+                    ค่าอาหารจริง:{" "}
+                    <span className="font-semibold">
+                      {o.conciergeFoodAmount != null
+                        ? `฿${Number(o.conciergeFoodAmount).toLocaleString("th-TH")}`
+                        : "รอไรเดอร์ซื้อของ"}
+                    </span>
+                  </p>
+                  <p className="text-xs text-gray-500 mt-2">
+                    หมายเหตุไรเดอร์:{" "}
+                    <span className="text-gray-700">{o.conciergeRiderNote ?? "—"}</span>
+                  </p>
+                </div>
+              )}
 
               {/* Items */}
               <div className="bg-white border border-gray-100 rounded-xl overflow-hidden">
