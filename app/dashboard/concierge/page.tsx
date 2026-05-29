@@ -1,5 +1,5 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { trpc, getToken } from "@/lib/trpc";
@@ -229,6 +229,27 @@ function CreateConciergeShopModal({
     }
   };
 
+  // Let the admin copy a logo (from a website / Finder) and paste it
+  // straight into the modal with Ctrl+V instead of saving a file first.
+  useEffect(() => {
+    const onPaste = (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (const it of Array.from(items)) {
+        if (it.type.startsWith("image/")) {
+          const file = it.getAsFile();
+          if (file) {
+            e.preventDefault();
+            handleUpload(file);
+            break;
+          }
+        }
+      }
+    };
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  }, []);
+
   const submit = () => {
     if (!name.trim()) return setError("กรอกชื่อร้านดัง");
     if (!category.trim()) return setError("กรอกหมวดหมู่");
@@ -284,16 +305,19 @@ function CreateConciergeShopModal({
                   <Star className="w-6 h-6 text-violet-300" />
                 )}
               </div>
-              <label className="inline-flex items-center gap-1.5 px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 cursor-pointer">
-                {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                {uploading ? "กำลังอัปโหลด…" : imageUrl ? "เปลี่ยนรูป" : "อัปโหลดโลโก้"}
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(f); }}
-                />
-              </label>
+              <div className="flex flex-col gap-1">
+                <label className="inline-flex items-center gap-1.5 px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 cursor-pointer w-fit">
+                  {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                  {uploading ? "กำลังอัปโหลด…" : imageUrl ? "เปลี่ยนรูป" : "อัปโหลดโลโก้"}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(f); }}
+                  />
+                </label>
+                <span className="text-[11px] text-gray-400">หรือคัดลอกรูปแล้วกด Ctrl+V (⌘V) วางได้เลย</span>
+              </div>
             </div>
           </div>
 
