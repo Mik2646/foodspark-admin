@@ -1,22 +1,17 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import dynamic from "next/dynamic";
-import { trpc, getToken } from "@/lib/trpc";
-import { uploadToR2 } from "@/lib/upload";
-import { CheckCircle, XCircle, ToggleLeft, ToggleRight, Pencil, Trash2, Plus, Loader2, X, Star, MapPin } from "lucide-react";
-
-const ConciergeLocationPicker = dynamic(() => import("@/components/LocationPickerMap"), {
-  ssr: false,
-  loading: () => (
-    <div className="h-[280px] w-full rounded-[14px] bg-gray-50 flex items-center justify-center text-sm text-gray-400">
-      กำลังโหลดแผนที่…
-    </div>
-  ),
-});
+import { trpc } from "@/lib/trpc";
+import { CheckCircle, XCircle, ToggleLeft, ToggleRight, Pencil, Trash2, Plus, Loader2, X } from "lucide-react";
 
 export default function RestaurantsPage() {
-  const { data: restaurants = [], isLoading, refetch } = trpc.admin.listRestaurants.useQuery();
+  const { data: allRestaurants = [], isLoading, refetch } = trpc.admin.listRestaurants.useQuery();
+  // ร้านดัง (รับหิ้ว) live on their own /dashboard/concierge page — keep them
+  // out of this list so the columns here stay merchant-restaurant shaped.
+  const restaurants = useMemo(
+    () => (allRestaurants as any[]).filter((r) => !r.isConcierge),
+    [allRestaurants],
+  );
   const { data: users = [] } = trpc.admin.listUsers.useQuery();
   const assign = trpc.admin.assignRestaurant.useMutation({ onSuccess: () => refetch() });
   const toggle = trpc.admin.toggleRestaurant.useMutation({ onSuccess: () => refetch() });
@@ -27,7 +22,6 @@ export default function RestaurantsPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkConfirm, setBulkConfirm] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
-  const [showCreateConcierge, setShowCreateConcierge] = useState(false);
   const deleteRestaurants = trpc.admin.deleteRestaurants.useMutation({
     onSuccess: (res: any) => {
       setBulkConfirm(false);
@@ -121,22 +115,13 @@ export default function RestaurantsPage() {
           <h1 className="text-2xl font-bold text-gray-900">จัดการร้านอาหาร</h1>
           <p className="text-xs text-gray-400 mt-1">{restaurants.length} ร้านในระบบ</p>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setShowCreateConcierge(true)}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-violet-600 hover:bg-violet-700 text-white px-3 py-2 text-sm font-semibold"
-          >
-            <Star className="w-4 h-4" /> เพิ่มร้านดัง (รับหิ้ว)
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowCreate(true)}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-orange-500 hover:bg-orange-600 text-white px-3 py-2 text-sm font-semibold"
-          >
-            <Plus className="w-4 h-4" /> สร้างร้านให้ผู้ใช้
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={() => setShowCreate(true)}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-orange-500 hover:bg-orange-600 text-white px-3 py-2 text-sm font-semibold"
+        >
+          <Plus className="w-4 h-4" /> สร้างร้านให้ผู้ใช้
+        </button>
       </div>
 
       {showCreate && (
@@ -146,16 +131,6 @@ export default function RestaurantsPage() {
           onClose={() => setShowCreate(false)}
           onCreated={() => {
             setShowCreate(false);
-            refetch();
-          }}
-        />
-      )}
-
-      {showCreateConcierge && (
-        <CreateConciergeShopModal
-          onClose={() => setShowCreateConcierge(false)}
-          onCreated={() => {
-            setShowCreateConcierge(false);
             refetch();
           }}
         />
@@ -565,197 +540,6 @@ function CreateRestaurantForOwnerModal({
           >
             {create.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
             {create.isPending ? "กำลังสร้าง..." : "สร้างร้านให้"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Default map center: เมืองอุดรธานี — where most concierge brand shops
-// (KFC, พิซซ่า, อเมซอน) actually sit. Saves the admin a long pan from
-// the บ้านผือ default.
-const CONCIERGE_DEFAULT_LAT = 17.4138;
-const CONCIERGE_DEFAULT_LNG = 102.787;
-
-/**
- * CreateConciergeShopModal — spawn a ร้านดัง (รับหิ้ว) brand shop. No
- * merchant owner, no menu. lat/lng are required because the customer
- * service fee = concierge policy × OSRM distance from this pin to them.
- */
-function CreateConciergeShopModal({
-  onClose,
-  onCreated,
-}: {
-  onClose: () => void;
-  onCreated: () => void;
-}) {
-  const create = trpc.admin.createConciergeShop.useMutation({
-    onSuccess: () => onCreated(),
-    onError: (e) => setError(e.message),
-  });
-
-  const [error, setError] = useState<string | null>(null);
-  const [name, setName] = useState("");
-  const [category, setCategory] = useState("");
-  const [address, setAddress] = useState("");
-  const [imageUrl, setImageUrl] = useState("");
-  const [uploading, setUploading] = useState(false);
-  const [coords, setCoords] = useState({ lat: CONCIERGE_DEFAULT_LAT, lng: CONCIERGE_DEFAULT_LNG });
-  const [pinned, setPinned] = useState(false);
-  const [openOnCreate, setOpenOnCreate] = useState(true);
-
-  const handleUpload = async (file: File) => {
-    setUploading(true);
-    try {
-      const url = await uploadToR2(file, getToken());
-      setImageUrl(url);
-    } catch (e: any) {
-      setError(e?.message ?? "อัปโหลดไม่สำเร็จ");
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const submit = () => {
-    if (!name.trim()) return setError("กรอกชื่อร้านดัง");
-    if (!category.trim()) return setError("กรอกหมวดหมู่");
-    if (!imageUrl) return setError("อัปโหลดโลโก้ร้าน");
-    if (!pinned) return setError("ปักหมุดตำแหน่งร้านบนแผนที่ก่อน (ใช้คิดค่าบริการตามระยะ)");
-    setError(null);
-    create.mutate({
-      name: name.trim(),
-      category: category.trim(),
-      address: address.trim() || undefined,
-      lat: coords.lat,
-      lng: coords.lng,
-      imageUrl,
-      openOnCreate,
-    });
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/45 p-3" onClick={onClose}>
-      <div
-        className="relative w-full max-w-lg max-h-[92vh] overflow-y-auto bg-white rounded-3xl shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="sticky top-0 z-10 bg-white border-b border-gray-100 px-5 py-3 flex items-center justify-between">
-          <h3 className="text-base font-extrabold text-gray-900 inline-flex items-center gap-1.5">
-            <Star className="w-4 h-4 text-violet-600" /> เพิ่มร้านดัง (รับหิ้ว)
-          </h3>
-          <button onClick={onClose} className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center">
-            <X size={14} />
-          </button>
-        </div>
-
-        <div className="p-5 space-y-3">
-          <p className="text-xs text-gray-500">
-            ร้านแบรนด์ในเมืองที่ไม่มีเมนู — ลูกค้าพิมพ์สั่งเอง ไรเดอร์ขับไปซื้อให้
-            ค่าบริการคิดตามระยะทางจากหมุดร้านนี้ถึงลูกค้า (ตั้งเรตได้ที่ ตั้งค่าระบบ → ร้านดัง)
-          </p>
-
-          {error && (
-            <div className="rounded-lg bg-rose-50 border border-rose-200 px-3 py-2 text-sm text-rose-700">
-              {error}
-            </div>
-          )}
-
-          <div>
-            <label className="block text-xs font-semibold text-gray-700 mb-1">โลโก้ร้าน (จัตุรัส 1:1)</label>
-            <div className="flex items-center gap-3">
-              <div className="w-20 h-20 rounded-2xl bg-gray-50 border border-gray-200 overflow-hidden flex items-center justify-center flex-shrink-0">
-                {imageUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={imageUrl} alt="โลโก้" className="w-full h-full object-cover" />
-                ) : (
-                  <Star className="w-6 h-6 text-violet-300" />
-                )}
-              </div>
-              <label className="inline-flex items-center gap-1.5 px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 cursor-pointer">
-                {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                {uploading ? "กำลังอัปโหลด…" : imageUrl ? "เปลี่ยนรูป" : "อัปโหลดโลโก้"}
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(f); }}
-                />
-              </label>
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-gray-700 mb-1">ชื่อร้าน</label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              maxLength={128}
-              placeholder="เช่น KFC อุดร, พิซซ่า, คาเฟ่อเมซอน"
-              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-gray-700 mb-1">หมวดหมู่</label>
-            <input
-              type="text"
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              maxLength={64}
-              placeholder="เช่น ไก่ทอด, พิซซ่า, กาแฟ"
-              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-gray-700 mb-1">ที่อยู่ร้าน (ไม่บังคับ)</label>
-            <textarea
-              value={address}
-              onChange={(e) => setAddress(e.target.value)}
-              rows={2}
-              maxLength={500}
-              placeholder="สาขา/ห้าง/ถนน ในเมือง"
-              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 resize-none"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-gray-700 mb-1 inline-flex items-center gap-1.5">
-              <MapPin className="w-3.5 h-3.5 text-violet-600" /> ตำแหน่งร้านบนแผนที่
-            </label>
-            <ConciergeLocationPicker
-              lat={coords.lat}
-              lng={coords.lng}
-              onChange={(next: { lat: number; lng: number }) => { setCoords(next); setPinned(true); }}
-              height="260px"
-            />
-            <p className="text-[11px] mt-1" style={{ color: pinned ? "#7C3AED" : "#9CA3AF" }}>
-              {pinned
-                ? `ปักหมุดแล้ว · ${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)}`
-                : "แตะแผนที่หรือลากหมุดเพื่อปักตำแหน่งร้าน"}
-            </p>
-          </div>
-
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={openOnCreate}
-              onChange={(e) => setOpenOnCreate(e.target.checked)}
-              className="w-4 h-4 rounded border-gray-300 text-violet-600 focus:ring-violet-400"
-            />
-            <span className="text-sm text-gray-700">เปิดให้ลูกค้าเห็นทันทีหลังสร้าง</span>
-          </label>
-
-          <button
-            type="button"
-            onClick={submit}
-            disabled={create.isPending || uploading}
-            className="mt-3 w-full inline-flex items-center justify-center gap-1.5 rounded-lg bg-violet-600 hover:bg-violet-700 text-white py-2.5 text-sm font-bold disabled:opacity-60"
-          >
-            {create.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Star className="w-4 h-4" />}
-            {create.isPending ? "กำลังสร้าง..." : "เพิ่มร้านดัง"}
           </button>
         </div>
       </div>
