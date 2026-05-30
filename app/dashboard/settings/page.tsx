@@ -62,16 +62,16 @@ const CONCIERGE_KEYS = {
 // the one-way distance ≈ 3.5/km of the real round trip — fuel + a little
 // labor without feeling steep to the customer.
 const CONCIERGE_DEFAULTS = {
-  baseFee: 15,
-  perKmRate: 7,
-  minFee: 30,
+  baseFee: 10,
+  perKmRate: 5,
+  minFee: 15,
   maxFee: 250,
 };
 
 const CONCIERGE_PRESETS = [
-  { label: "พอดี", values: { baseFee: 15, perKmRate: 7, minFee: 30, maxFee: 250 } },
-  { label: "คุ้มไรเดอร์", values: { baseFee: 15, perKmRate: 9, minFee: 30, maxFee: 300 } },
-  { label: "ประหยัดลูกค้า", values: { baseFee: 15, perKmRate: 5, minFee: 30, maxFee: 200 } },
+  { label: "เท่าร้านทั่วไป", values: { baseFee: 10, perKmRate: 5, minFee: 15, maxFee: 250 } },
+  { label: "สายกลาง", values: { baseFee: 10, perKmRate: 6, minFee: 20, maxFee: 250 } },
+  { label: "คุ้มไรเดอร์", values: { baseFee: 15, perKmRate: 7, minFee: 30, maxFee: 250 } },
 ];
 
 type PromoCode = {
