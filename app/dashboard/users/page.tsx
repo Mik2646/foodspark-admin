@@ -201,7 +201,7 @@ export default function UsersPage() {
                   </td>
                   <td className="px-4 py-3">
                     {/* Multi-role toggles — an account can be more than one. */}
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1.5">
                       {([
                         { key: "merchant" as const, label: "ร้าน", on: u.role === "admin" || u.merchantApprovalStatus === "approved" },
                         { key: "rider" as const, label: "ไรเดอร์", on: u.role === "admin" || u.riderApprovalStatus === "approved" },
@@ -212,8 +212,10 @@ export default function UsersPage() {
                           type="button"
                           disabled={changingId === u.id}
                           onClick={() => toggleRole(u, key)}
-                          className={`px-2 py-0.5 rounded-full text-xs font-medium border transition-colors disabled:opacity-50 ${
-                            on ? "bg-orange-500 border-orange-500 text-white" : "bg-white border-gray-200 text-gray-500 hover:bg-gray-50"
+                          className={`whitespace-nowrap px-3 py-1 rounded-full text-xs font-medium border transition-colors disabled:opacity-50 ${
+                            on
+                              ? "bg-orange-500 border-orange-500 text-white"
+                              : "bg-white border-gray-200 text-gray-500 hover:border-orange-300 hover:text-orange-600"
                           }`}
                         >
                           {label}
