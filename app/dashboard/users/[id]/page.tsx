@@ -137,8 +137,14 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
           <InfoRow icon={<Calendar className="w-4 h-4 text-gray-400" />} label="สมัครเมื่อ" value={fmt(user.createdAt)} />
           <InfoRow icon={<Clock className="w-4 h-4 text-gray-400" />} label="เข้าสู่ระบบล่าสุด" value={fmt(user.lastSignedIn)} />
           <ApprovalRow label="สถานะอนุมัติทั่วไป" status={user.approvalStatus} />
-          {role === "merchant" && <ApprovalRow label="อนุมัติร้านค้า" status={user.merchantApprovalStatus} />}
-          {role === "rider" && <ApprovalRow label="อนุมัติไรเดอร์" status={user.riderApprovalStatus} />}
+          {/* Multi-role: show both regardless of primary role so a merchant
+              who is also a rider (or vice-versa) sees both statuses. */}
+          {(role === "merchant" || role === "admin" || user.merchantApprovalStatus === "approved") && (
+            <ApprovalRow label="อนุมัติร้านค้า" status={user.merchantApprovalStatus} />
+          )}
+          {(role === "rider" || role === "admin" || user.riderApprovalStatus === "approved") && (
+            <ApprovalRow label="อนุมัติไรเดอร์" status={user.riderApprovalStatus} />
+          )}
         </div>
       </div>
 

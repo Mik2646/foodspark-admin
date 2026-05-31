@@ -20,7 +20,7 @@ const BLOCKED_REASON_LABEL: Record<string, string> = {
 
 export default function UsersPage() {
   const { data: users = [], isLoading, refetch } = trpc.admin.listUsers.useQuery();
-  const setRole = trpc.admin.setUserRoleAll.useMutation({ onSuccess: () => refetch() });
+  const setRoles = trpc.admin.setUserRoles.useMutation({ onSuccess: () => refetch() });
   const deleteUser = trpc.admin.deleteUser.useMutation({ onSuccess: () => refetch() });
   const [changingId, setChangingId] = useState<number | null>(null);
   const [search, setSearch] = useState("");
@@ -78,9 +78,16 @@ export default function UsersPage() {
     });
   };
 
-  async function handleRoleChange(userId: number, role: "user" | "merchant" | "admin" | "rider") {
-    setChangingId(userId);
-    await setRole.mutateAsync({ userId, role });
+  // Multi-role: toggle one role on/off without disturbing the others.
+  async function toggleRole(u: any, key: "merchant" | "rider" | "admin") {
+    const cur = {
+      isMerchant: u.role === "admin" || u.merchantApprovalStatus === "approved",
+      isRider: u.role === "admin" || u.riderApprovalStatus === "approved",
+      isAdmin: u.role === "admin",
+    };
+    const next = { ...cur, [key === "merchant" ? "isMerchant" : key === "rider" ? "isRider" : "isAdmin"]: !cur[key === "merchant" ? "isMerchant" : key === "rider" ? "isRider" : "isAdmin"] };
+    setChangingId(u.id);
+    await setRoles.mutateAsync({ userId: u.id, ...next });
     setChangingId(null);
   }
 
@@ -193,17 +200,26 @@ export default function UsersPage() {
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    <select
-                      value={role}
-                      disabled={changingId === u.id}
-                      onChange={e => handleRoleChange(u.id, e.target.value as any)}
-                      className="border border-gray-200 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-orange-400 disabled:opacity-50"
-                    >
-                      <option value="user">ผู้ใช้</option>
-                      <option value="merchant">ร้านค้า</option>
-                      <option value="rider">ไรเดอร์</option>
-                      <option value="admin">แอดมิน</option>
-                    </select>
+                    {/* Multi-role toggles — an account can be more than one. */}
+                    <div className="flex items-center gap-1">
+                      {([
+                        { key: "merchant" as const, label: "ร้าน", on: u.role === "admin" || u.merchantApprovalStatus === "approved" },
+                        { key: "rider" as const, label: "ไรเดอร์", on: u.role === "admin" || u.riderApprovalStatus === "approved" },
+                        { key: "admin" as const, label: "แอดมิน", on: u.role === "admin" },
+                      ]).map(({ key, label, on }) => (
+                        <button
+                          key={key}
+                          type="button"
+                          disabled={changingId === u.id}
+                          onClick={() => toggleRole(u, key)}
+                          className={`px-2 py-0.5 rounded-full text-xs font-medium border transition-colors disabled:opacity-50 ${
+                            on ? "bg-orange-500 border-orange-500 text-white" : "bg-white border-gray-200 text-gray-500 hover:bg-gray-50"
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
                   </td>
                   <td className="px-4 py-3">
                     <button
