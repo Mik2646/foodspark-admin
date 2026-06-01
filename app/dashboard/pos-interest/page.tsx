@@ -24,6 +24,10 @@ export default function PosInterestPage() {
   const { data = [], isLoading, error } = trpc.admin.listPosInterest.useQuery(undefined, {
     refetchInterval: 30000,
   });
+  const { data: payments = [] } = (trpc.admin as any).listPosPayments.useQuery(undefined, { refetchInterval: 30000 });
+  const confirmPay = (trpc.admin as any).confirmPosPayment.useMutation({
+    onSuccess: () => { utils.admin.listPosPayments.invalidate(); utils.admin.listPosInterest.invalidate(); },
+  });
 
   const setPlan = trpc.admin.setMerchantPlan.useMutation({
     onSuccess: () => utils.admin.listPosInterest.invalidate(),
@@ -60,6 +64,42 @@ export default function PosInterestPage() {
           <span className="text-sm text-gray-500">ร้าน</span>
         </div>
       </div>
+
+      {payments.length > 0 ? (
+        <div className="mb-6 bg-white rounded-2xl border border-amber-100 shadow-sm overflow-hidden">
+          <div className="px-4 py-3 bg-amber-50 text-sm font-medium text-amber-700">รอยืนยันการชำระเงิน ({payments.length})</div>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-100 text-left text-gray-500">
+                <th className="px-4 py-3 font-medium">ร้าน</th>
+                <th className="px-4 py-3 font-medium">รอบ</th>
+                <th className="px-4 py-3 font-medium">ยอด</th>
+                <th className="px-4 py-3 font-medium">สลิป</th>
+                <th className="px-4 py-3 font-medium text-right">จัดการ</th>
+              </tr>
+            </thead>
+            <tbody>
+              {payments.map((p: any) => (
+                <tr key={p.id} className="border-b border-gray-50">
+                  <td className="px-4 py-3 font-medium text-gray-900">{p.restaurantName ?? "—"}</td>
+                  <td className="px-4 py-3 text-gray-700">{p.cycle === "annual" ? "รายปี" : "รายเดือน"}</td>
+                  <td className="px-4 py-3 text-gray-700">฿{p.amount}</td>
+                  <td className="px-4 py-3">{p.slipUrl ? <a href={p.slipUrl} target="_blank" className="text-orange-600 underline">ดูสลิป</a> : "—"}</td>
+                  <td className="px-4 py-3 text-right">
+                    <button
+                      onClick={() => confirmPay.mutate({ paymentId: p.id })}
+                      disabled={confirmPay.isPending}
+                      className="rounded-lg bg-green-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
+                    >
+                      {confirmPay.isPending ? "..." : "ยืนยัน & เปิด POS"}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
 
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
         {error ? (
