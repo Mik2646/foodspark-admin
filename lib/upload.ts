@@ -1,3 +1,36 @@
+import { API_BASE_URL } from "@/lib/config";
+
+// Upload (replace) the customer Android APK. Large binary (~50-80MB) so it
+// goes STRAIGHT to the backend API (Pi via CF tunnel, ~100MB limit) — NOT
+// through the Vercel Next proxy, whose serverless body cap is ~4.5MB. Uses
+// XHR to report upload progress on the big file.
+export function uploadApk(
+  file: File,
+  token: string | null,
+  onProgress?: (pct: number) => void,
+): Promise<{ url: string; size: number }> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `${API_BASE_URL}/api/upload-apk`);
+    if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+    xhr.setRequestHeader("Content-Type", "application/vnd.android.package-archive");
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 100));
+    };
+    xhr.onload = () => {
+      let data: { url?: string; size?: number; error?: string } | null = null;
+      try { data = JSON.parse(xhr.responseText); } catch { /* non-json */ }
+      if (xhr.status >= 200 && xhr.status < 300 && data?.url) {
+        resolve({ url: data.url, size: data.size ?? file.size });
+      } else {
+        reject(new Error(data?.error ?? `อัปโหลดไม่สำเร็จ (HTTP ${xhr.status})`));
+      }
+    };
+    xhr.onerror = () => reject(new Error("เชื่อมต่อเซิร์ฟเวอร์ไม่ได้"));
+    xhr.send(file);
+  });
+}
+
 // Shared image-upload helper for admin pages.
 // Posts a base64-encoded file to /api/upload and surfaces a readable
 // error when the server replies with non-JSON (e.g. 413 plain-text

@@ -19,6 +19,7 @@ import {
   LayoutDashboard,
   LogOut,
   MonitorSmartphone,
+  Smartphone,
   ShieldCheck,
   ShoppingBasket,
   Star,
@@ -58,6 +59,7 @@ const links = [
   { href: "/dashboard/promos", label: "โปรโมโค้ด", icon: TicketPercent },
   { href: "/dashboard/flash-deals", label: "ดีลแฟลช", icon: Flame },
   { href: "/dashboard/banners", label: "จัดการ Banner", icon: Image },
+  { href: "/dashboard/app-release", label: "ไฟล์แอป (APK)", icon: Smartphone },
   { href: "/dashboard/settings", label: "ตั้งค่าระบบ", icon: Settings },
 ];
 
