@@ -3,7 +3,7 @@ import { trpc, getToken } from "@/lib/trpc";
 import { uploadToR2 } from "@/lib/upload";
 import { useState, useEffect } from "react";
 import Image from "next/image";
-import { Plus, Trash2, ImageIcon, Layers, Megaphone, Pencil, X, Clock, CheckCircle, Smartphone, AlertTriangle } from "lucide-react";
+import { Plus, Trash2, ImageIcon, Layers, Megaphone, Pencil, X, Clock, CheckCircle, Smartphone, AlertTriangle, Clipboard } from "lucide-react";
 
 type Banner = {
   imageUrl: string;
@@ -84,6 +84,47 @@ function BannerSection({
     } finally { setUploading(false); }
   };
 
+  // Ctrl+V anywhere in the form — if the clipboard carries an image,
+  // route it through handleUpload (same path as the file picker). Text
+  // pastes into title/subtitle inputs are unaffected because we only
+  // preventDefault when we actually consume an image item.
+  const handlePaste = (e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item.type.startsWith("image/")) {
+        e.preventDefault();
+        const file = item.getAsFile();
+        if (file) handleUpload(file);
+        return;
+      }
+    }
+  };
+
+  // Button-driven paste using the Clipboard API for users who don't
+  // know the Ctrl+V trick. Requires HTTPS and a user-gesture (the click
+  // is the gesture). Throws "NotAllowed" if the browser denies; we
+  // surface that as a clear alert instead of failing silently.
+  const pasteFromClipboard = async () => {
+    try {
+      const items = await navigator.clipboard.read();
+      for (const item of items) {
+        const imgType = item.types.find((t) => t.startsWith("image/"));
+        if (imgType) {
+          const blob = await item.getType(imgType);
+          const ext = imgType.split("/")[1] || "png";
+          const file = new File([blob], `pasted-${Date.now()}.${ext}`, { type: imgType });
+          await handleUpload(file);
+          return;
+        }
+      }
+      alert("คลิปบอร์ดไม่มีรูปภาพ — ก๊อปรูปจากที่อื่นก่อน แล้วลองใหม่");
+    } catch (err: any) {
+      alert("วางรูปไม่สำเร็จ: " + (err?.message ?? "browser ไม่อนุญาต — ลอง Ctrl+V แทน"));
+    }
+  };
+
   const openAdd = () => { setEditIndex(null); setForm(EMPTY_FORM); setAspectWarning(null); setShowForm(true); };
   const openEdit = (i: number) => { setEditIndex(i); setForm({ ...EMPTY_FORM, ...banners[i] }); setAspectWarning(null); setShowForm(true); };
   const closeForm = () => { setShowForm(false); setEditIndex(null); setForm(EMPTY_FORM); setAspectWarning(null); };
@@ -139,17 +180,24 @@ function BannerSection({
 
       {/* Add / Edit Form */}
       {showForm && (
-        <div className="px-6 py-4 bg-gray-50 border-b border-gray-100">
+        <div className="px-6 py-4 bg-gray-50 border-b border-gray-100" onPaste={handlePaste}>
           <div className="flex items-center justify-between mb-3">
             <p className="text-sm font-semibold text-gray-700">{editIndex !== null ? "แก้ไข Banner" : "เพิ่ม Banner ใหม่"}</p>
             <button onClick={closeForm}><X className="w-4 h-4 text-gray-400" /></button>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">อัปโหลดรูปภาพ</label>
-              <input type="file" accept="image/*" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(f); }}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-600 file:mr-3 file:py-1 file:px-3 file:rounded-md file:border-0 file:bg-orange-50 file:text-orange-600 file:font-medium bg-white" />
-              {uploading && <p className="text-xs text-orange-500 mt-1">⏳ กำลังอัปโหลดไป R2...</p>}
+              <label className="block text-xs font-medium text-gray-500 mb-1">อัปโหลดรูปภาพ <span className="text-gray-400 font-normal">· หรือ Ctrl+V วางรูปได้เลย</span></label>
+              <div className="flex gap-2">
+                <input type="file" accept="image/*" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(f); }}
+                  className="flex-1 min-w-0 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-600 file:mr-3 file:py-1 file:px-3 file:rounded-md file:border-0 file:bg-orange-50 file:text-orange-600 file:font-medium bg-white" />
+                <button type="button" onClick={pasteFromClipboard} disabled={uploading}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 border border-gray-200 text-gray-700 text-xs font-medium rounded-lg bg-white hover:bg-gray-50 disabled:opacity-50 shrink-0"
+                  title="วางรูปจากคลิปบอร์ด">
+                  <Clipboard className="w-3.5 h-3.5" /> วาง
+                </button>
+              </div>
+              {uploading && <p className="text-xs text-orange-500 mt-1">กำลังอัปโหลดไป R2...</p>}
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1">หรือวาง URL รูปภาพ</label>
