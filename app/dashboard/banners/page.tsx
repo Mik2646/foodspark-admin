@@ -3,7 +3,7 @@ import { trpc, getToken } from "@/lib/trpc";
 import { uploadToR2 } from "@/lib/upload";
 import { useState, useEffect } from "react";
 import Image from "next/image";
-import { Plus, Trash2, ImageIcon, Layers, Megaphone, Pencil, X, Clock, CheckCircle } from "lucide-react";
+import { Plus, Trash2, ImageIcon, Layers, Megaphone, Pencil, X, Clock, CheckCircle, Smartphone, AlertTriangle } from "lucide-react";
 
 type Banner = {
   imageUrl: string;
@@ -18,10 +18,15 @@ const EMPTY_FORM: Omit<Banner, "imageUrl"> & { imageUrl: string } = {
 };
 
 function BannerSection({
-  title, description, icon, settingKey, accentColor,
+  title, description, icon, settingKey, accentColor, expectedAspect, aspectHint,
 }: {
   title: string; description: string; icon: React.ReactNode;
   settingKey: string; accentColor: string;
+  // Width/height ratio the section expects (e.g. 9/16 for portrait splash).
+  // When set, the upload handler measures the chosen image and shows a
+  // soft warning if it deviates by >10% — never blocks the submit.
+  expectedAspect?: number;
+  aspectHint?: string;
 }) {
   const utils = trpc.useUtils();
   const { data: settings } = trpc.admin.getSettings.useQuery();
@@ -36,6 +41,9 @@ function BannerSection({
   const [editIndex, setEditIndex] = useState<number | null>(null);
   const [form, setForm] = useState(EMPTY_FORM);
   const [uploading, setUploading] = useState(false);
+  // Soft aspect-ratio warning shown under the preview when expectedAspect
+  // is set and the uploaded image differs by >10%. Doesn't block submit.
+  const [aspectWarning, setAspectWarning] = useState<string | null>(null);
 
   useEffect(() => {
     if (!settings) return;
@@ -49,17 +57,36 @@ function BannerSection({
 
   const handleUpload = async (file: File) => {
     setUploading(true);
+    setAspectWarning(null);
     try {
       const url = await uploadToR2(file, getToken());
       setForm((f) => ({ ...f, imageUrl: url }));
+      // Measure dimensions client-side from the chosen file (no extra
+      // network — uses the local Blob, runs after upload succeeds).
+      if (expectedAspect) {
+        const objUrl = URL.createObjectURL(file);
+        const img = new window.Image();
+        img.onload = () => {
+          const actual = img.naturalWidth / img.naturalHeight;
+          const drift = Math.abs(actual - expectedAspect) / expectedAspect;
+          if (drift > 0.1) {
+            setAspectWarning(
+              `รูปอัตราส่วน ${img.naturalWidth}×${img.naturalHeight} (≈${actual.toFixed(2)}:1) — แนะนำ ${aspectHint ?? "ตามที่กำหนด"} จะคมและไม่ตัดขอบบนมือถือ`,
+            );
+          }
+          URL.revokeObjectURL(objUrl);
+        };
+        img.onerror = () => URL.revokeObjectURL(objUrl);
+        img.src = objUrl;
+      }
     } catch (e: any) {
       alert("เกิดข้อผิดพลาด: " + (e?.message ?? "อัปโหลดไม่สำเร็จ"));
     } finally { setUploading(false); }
   };
 
-  const openAdd = () => { setEditIndex(null); setForm(EMPTY_FORM); setShowForm(true); };
-  const openEdit = (i: number) => { setEditIndex(i); setForm({ ...EMPTY_FORM, ...banners[i] }); setShowForm(true); };
-  const closeForm = () => { setShowForm(false); setEditIndex(null); setForm(EMPTY_FORM); };
+  const openAdd = () => { setEditIndex(null); setForm(EMPTY_FORM); setAspectWarning(null); setShowForm(true); };
+  const openEdit = (i: number) => { setEditIndex(i); setForm({ ...EMPTY_FORM, ...banners[i] }); setAspectWarning(null); setShowForm(true); };
+  const closeForm = () => { setShowForm(false); setEditIndex(null); setForm(EMPTY_FORM); setAspectWarning(null); };
 
   const handleSubmit = () => {
     if (!form.imageUrl.trim()) return;
@@ -162,6 +189,12 @@ function BannerSection({
                 unoptimized
                 className="h-28 w-auto rounded-xl object-cover border border-gray-200"
               />
+              {aspectWarning && (
+                <div className="mt-2 inline-flex items-start gap-1.5 px-2.5 py-1.5 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-700">
+                  <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                  <span>{aspectWarning}</span>
+                </div>
+              )}
             </div>
           )}
 
@@ -248,12 +281,16 @@ export default function BannersPage() {
     <div>
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">จัดการ Banner</h1>
-        <p className="text-sm text-gray-400 mt-1">แยกการจัดการ Banner เลื่อนหน้าแรก และ Banner Popup ตอนเปิดแอป</p>
+        <p className="text-sm text-gray-400 mt-1">Banner เลื่อนหน้าแรก · Popup ตอนเปิดแอป · Splash เต็มจอ 9:16</p>
       </div>
       <BannerSection title="Banner เลื่อน (Carousel)" description="แสดงเลื่อนซ้าย-ขวาบนหน้าแรกของแอป — เพิ่มได้หลายใบ"
         icon={<Layers className="w-5 h-5" style={{ color: "#FF6B00" }} />} settingKey="slide_banners" accentColor="#FF6B00" />
       <BannerSection title="Banner Popup (โฆษณาตอนเปิดแอป)" description="โชว์เป็น Dialog เมื่อผู้ใช้เปิดแอป — เลื่อนดูได้หลายใบ"
         icon={<Megaphone className="w-5 h-5" style={{ color: "#8B5CF6" }} />} settingKey="popup_banners" accentColor="#8B5CF6" />
+      <BannerSection title="Banner Splash (เต็มจอ 9:16)"
+        description="แสดงเต็มหน้าจอแนวตั้งก่อน home — สไตล์ story ads · ถ้ามี Splash จะข้าม Popup ของวันนั้น"
+        icon={<Smartphone className="w-5 h-5" style={{ color: "#10B981" }} />} settingKey="splash_banners" accentColor="#10B981"
+        expectedAspect={9 / 16} aspectHint="9:16 (เช่น 1080×1920)" />
     </div>
   );
 }
